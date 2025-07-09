@@ -1,0 +1,21 @@
+# Archivo de ejemplo para variables de Terraform
+# Copia este archivo como terraform.tfvars y completa los valores
+
+# ID del proyecto de Google Cloud (REQUERIDO)
+project_id = "tu-proyecto-gcp"
+
+# Región de Google Cloud (opcional, por defecto us-central1)
+region = "us-central1"
+
+# Nombre del servicio Cloud Run (opcional, por defecto adnia)
+service_name = "adnia"
+
+# URL de la imagen Docker (REQUERIDO después de construir la imagen)
+image_url = "gcr.io/tu-proyecto-gcp/adnia:latest"
+
+# Clave API de Mistral (opcional, pero recomendado para funcionalidad completa)
+mistral_api_key = "tu-clave-mistral-api"
+
+# Google OAuth Client ID (opcional, para autenticación con Google)
+google_client_id = "tu-google-client-id"
+
