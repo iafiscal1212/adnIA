@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Test Login ADNIA</title>
+  <style>
+    body {
+      background: black;
+      color: #00ffcc;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 8px;
+      border: none;
+      border-radius: 5px;
+    }
+    button {
+      background-color: #00ff88;
+      font-weight: bold;
+    }
+    .respuesta {
+      margin-top: 20px;
+      white-space: pre-wrap;
+      color: #66ffcc;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔐 Test de Login ADNIA</h1>
+
+  <input id="usuario" placeholder="Usuario" />
+  <input id="clave" type="password" placeholder="Clave" />
+  <button onclick="login()">Iniciar sesión</button>
+
+  <div class="respuesta" id="respuesta"></div>
+
+  <script>
+    async function login() {
+      const usuario = document.getElementById("usuario").value;
+      const clave = document.getElementById("clave").value;
+
+      const res = await fetch("http://localhost:3002/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ usuario, clave }),
+        credentials: "include"
+      });
+
+      const data = await res.json();
+      document.getElementById("respuesta").innerText = JSON.stringify(data, null, 2);
+    }
+  </script>
+</body>
+</html>

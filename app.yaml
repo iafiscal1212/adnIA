@@ -1,0 +1,43 @@
+# Configuración para Google App Engine
+runtime: python311
+
+# Variables de entorno
+env_variables:
+  FLASK_ENV: production
+  PYTHONPATH: /srv
+
+# Configuración de recursos
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.6
+
+# Configuración de red
+network:
+  session_affinity: true
+
+# Configuración de archivos estáticos
+handlers:
+- url: /static
+  static_dir: static
+  secure: always
+
+- url: /.*
+  script: auto
+  secure: always
+
+# Configuración de tiempo de espera
+readiness_check:
+  path: "/ping"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+liveness_check:
+  path: "/ping"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+

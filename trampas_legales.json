@@ -1,0 +1,29 @@
+[
+  {
+    "titular": "Desfase entre ley estatal y autonómica en ayudas al autónomo",
+    "descripcion": "La normativa autonómica en Andalucía permite deducciones adicionales a autónomos no contempladas por la ley estatal del IRPF.",
+    "constitucion": {
+      "articulo": "139",
+      "titulo": "Unidad de mercado",
+      "texto": "Todos los españoles tienen los mismos derechos y obligaciones en cualquier parte del territorio del Estado."
+    }
+  },
+  {
+    "titular": "Incompatibilidad entre Reglamento y Ley en Seguridad Social",
+    "descripcion": "Un reglamento posterior contradice el artículo 47 de la Ley General de la Seguridad Social en cuanto al cómputo de días cotizados.",
+    "constitucion": {
+      "articulo": "9",
+      "titulo": "Jerarquía normativa",
+      "texto": "Los ciudadanos y los poderes públicos están sujetos a la Constitución y al resto del ordenamiento jurídico."
+    }
+  },
+  {
+    "titular": "Publicación de norma sin plazo de entrada en vigor definido",
+    "descripcion": "Una disposición BOE de febrero 2024 no establece un plazo claro para su entrada en vigor, generando inseguridad jurídica.",
+    "constitucion": {
+      "articulo": "9.3",
+      "titulo": "Principio de seguridad jurídica",
+      "texto": "La Constitución garantiza la seguridad jurídica, la responsabilidad y la interdicción de la arbitrariedad de los poderes públicos."
+    }
+  }
+]

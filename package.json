@@ -1,0 +1,29 @@
+{
+  "name": "adnia-ui",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@react-oauth/google": "^0.12.2",
+    "@stripe/stripe-js": "^7.3.0",
+    "axios": "^1.9.0",
+    "body-parser": "^2.2.0",
+    "dotenv": "^16.5.0",
+    "express": "^5.1.0",
+    "jspdf": "^3.0.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-icons": "^5.5.0",
+    "react-router-dom": "^6.30.0",
+    "react-scripts": "^3.0.1",
+    "react-tsparticles": "^2.12.2",
+    "recharts": "^2.15.3",
+    "tsparticles": "^2.12.0"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "dev": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  }
+}

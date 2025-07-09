@@ -1,0 +1,12 @@
+{
+  "carmen.esteban@assemglobal.com": {
+    "clave": "",
+    "rol": "google",
+    "pais": "España"
+  },
+  "test": {
+    "clave": "$2b$12$AaPmMGwiQqvxFVBkQpGpr.TES7zwH1RyQaJhnR1bIkOrRnAog6h1e",
+    "rol": "cliente",
+    "pais": "España"
+  }
+}
