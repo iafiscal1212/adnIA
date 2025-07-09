@@ -1,0 +1,1 @@
+// MainApp.jsx con rutas protegidas

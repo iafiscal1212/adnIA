@@ -1,0 +1,56 @@
+/* adnia-ui.css */
+body {
+  background-color: #000;
+  color: #00ff88;
+  font-family: 'Share Tech Mono', monospace;
+  margin: 0;
+  padding: 0;
+}
+
+h1, h2, h3 {
+  color: #00ffe7;
+  text-shadow: 0 0 5px #00ffe7;
+}
+
+button {
+  background: linear-gradient(to right, #00ffe7, #00ff88);
+  border: 1px solid #00ff88;
+  color: #00ff88;
+  font-weight: bold;
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: 0 0 10px #00ff88;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+button:hover {
+  transform: scale(1.05);
+  filter: brightness(1.2);
+}
+
+.card {
+  background-color: #111;
+  border: 1px solid #00ff88;
+  padding: 20px;
+  border-radius: 10px;
+  margin: 10px 0;
+  box-shadow: 0 0 10px #00ff88;
+}
+
+pre, code {
+  background-color: #111;
+  color: #00ff88;
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 14px;
+}
+
+a {
+  color: #00ffe7;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}

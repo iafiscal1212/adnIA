@@ -1,0 +1,5 @@
+body { background:#000; color:#0f0; font-family:sans-serif; padding:16px; }
+h1 { color:#0ff; }
+.chat-box { border:1px solid #0ff; padding:8px; margin:8px 0; max-height:300px; overflow:auto; }
+textarea { background:#111; color:#0ff; border:1px solid #0ff; }
+button { background:#0ff; color:#000; border:none; padding:4px 12px; cursor:pointer; }

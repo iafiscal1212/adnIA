@@ -1,0 +1,1 @@
+// BarraLateral.jsx con historial y favoritas por jurisdicción

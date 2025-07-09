@@ -1,0 +1,1 @@
+// App.jsx contenido completo integrado

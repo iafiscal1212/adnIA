@@ -1,0 +1,1 @@
+// RutaProtegida.jsx protección por rol
