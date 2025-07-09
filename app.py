@@ -380,7 +380,39 @@ Incluye referencias y fundamento legal siempre.
         print(traceback.format_exc())
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
+@app.route("/mistral", methods=["POST"])
+def mistral_endpoint():
+    try:
+        data = request.json
+        prompt = data.get("prompt", "")
+        respuesta = generar_respuesta_mistral(prompt)
+        return jsonify({"respuesta": respuesta})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8080))
     app.run(debug=False, host="0.0.0.0", port=port)
+
+
+def generar_respuesta_mistral(prompt):
+    url = "https://api.mistral.ai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {MISTRAL_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "mistral-medium",
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7
+    }
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        if response.status_code == 200:
+            return response.json()["choices"][0]["message"]["content"]
+        else:
+            return f"❌ Error Mistral: {response.status_code} - {response.text}"
+    except Exception as e:
+        return f"❌ Error de conexión con Mistral: {str(e)}"
+
