@@ -3,97 +3,113 @@ import re
 import json
 import traceback
 from flask import Flask, request, jsonify, session, send_file
-from flask_session import Session 
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from dotenv import load_dotenv
 from datetime import timedelta, datetime
 from werkzeug.utils import secure_filename
 import requests
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from flask_sqlalchemy import SQLAlchemy
+from google.cloud import storage
 
 load_dotenv()
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-USERS_PATH = "usuarios.json"
 
+# Variables de entorno
+DATABASE_URL = os.getenv("DATABASE_URL")
+SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key_for_prod")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GCS_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME")
+ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "default-admin-secret-for-dev-only")
+
+# Instancia de la aplicación Flask
 app = Flask(__name__)
 
-# Configuración de cookies de sesión (imprescindible para que no te expulse en local)
-app.config['SECRET_KEY'] = "182895ae6f63973981dc29270699222f4f427311f23385f4b5010330513d5e5d"  # Tu clave secreta
+# Configuración de base de datos
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Configuración de sesiones
+app.config['SECRET_KEY'] = SECRET_KEY
 app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = "Lax"
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=6)
 
+# Clientes de servicios
 bcrypt = Bcrypt(app)
 CORS(app, supports_credentials=True)
+storage_client = storage.Client()
+bucket = storage_client.bucket(GCS_BUCKET_NAME)
 
-# --- Utilidades usuarios ---
-def load_usuarios():
-    # Si hay error o no es un diccionario, repara:
+# --- Modelos de base de datos ---
+class User(db.Model):
+    __tablename__ = 'adnia_users'
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    rol = db.Column(db.String(50), nullable=False, default='cliente')
+    pais = db.Column(db.String(50), nullable=True, default='España')
+    google_id = db.Column(db.String(255), unique=True, nullable=True)
+
+    def __repr__(self):
+        return f'<User {self.email}>'
+
+class Document(db.Model):
+    __tablename__ = 'adnia_documents'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('adnia_users.id'), nullable=False)
+    file_name = db.Column(db.String(255), nullable=False)
+    gcs_path = db.Column(db.String(512), nullable=False, unique=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<Document {self.file_name}>'
+
+# --- Utilidades generales ---
+def login_requerido(f):
+    @wraps(f)
+    def decorada(*args, **kwargs):
+        if not session.get("usuario"):
+            return jsonify({"ok": False, "error": "No autenticado"}), 401
+        return f(*args, **kwargs)
+    return decorada
+
+def create_db_tables():
+    with app.app_context():
+        print("Creando tablas de base de datos si no existen...")
+        db.create_all()
+        print("Tablas verificadas/creadas.")
+
+# --- Endpoints ---
+
+# Endpoint de administración para crear tablas
+@app.route("/admin/create-tables", methods=['POST'])
+def admin_create_tables():
+    provided_key = request.headers.get('X-Admin-Secret-Key')
+    if provided_key != ADMIN_SECRET_KEY:
+        return jsonify({"ok": False, "error": "Acceso no autorizado"}), 401
+    
     try:
-        if os.path.exists(USERS_PATH):
-            with open(USERS_PATH, encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    return data
-                # ¡Si por error es lista o string, repara!
-                return {}
-        else:
-            return {}
-    except Exception:
-        return {}
+        create_db_tables()
+        return jsonify({"ok": True, "message": "Tablas verificadas/creadas."}), 200
+    except Exception as e:
+        print(f"Error en /admin/create-tables: {traceback.format_exc()}")
+        return jsonify({"ok": False, "error": f"Error al crear tablas: {str(e)}"}), 500
 
-def save_usuarios(users):
-    with open(USERS_PATH, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
-
-# --- Registro (alta) de usuario ---
 @app.route("/")
 def home():
     return send_file("static/index.html")
 
 @app.route("/ping")
 def ping():
-    return "pong", 200
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.get_json()
-    usuario = data.get("usuario", "").strip()
-    clave = data.get("clave", "").strip()
-    rol = data.get("rol", "cliente")
-    pais = data.get("pais", "España")
-    if not usuario or not clave or len(clave) < 8:
-        return jsonify({"ok": False, "error": "Usuario y contraseña requerida, mínimo 8 caracteres."}), 400
-    users = load_usuarios()
-    if usuario in users:
-        return jsonify({"ok": False, "error": "Usuario ya existe"}), 409
-    users[usuario] = {
-        "clave": bcrypt.generate_password_hash(clave).decode(),
-        "rol": rol, "pais": pais
-    }
-    save_usuarios(users)
-    return jsonify({"ok": True, "usuario": usuario, "rol": rol, "pais": pais})
-
-# --- Login de usuario registrado ---
-@app.route("/login", methods=["POST"])
-def login():
-    data = request.get_json()
-    usuario = data.get("usuario", "")
-    clave = data.get("clave", "")
-    users = load_usuarios()
-    user = users.get(usuario)
-    if user and user["clave"] and bcrypt.check_password_hash(user["clave"], clave):
-        session["usuario"] = usuario
-        session.permanent = True
-        return jsonify({"ok": True, "usuario": usuario, "rol": user.get("rol", "cliente"), "pais": user.get("pais", "España")})
-    else:
-        return jsonify({"ok": False, "error": "Usuario o clave incorrectos."}), 401
-
-# --- Login Google OAuth2 ---
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
+    try:
+        db.session.execute(db.text('SELECT 1'))
+        return "pong (database connected)", 200
+    except Exception:
+        return "pong (database not connected)", 500
 
 @app.route("/login-google", methods=["POST"])
 def login_google():
@@ -106,313 +122,93 @@ def login_google():
             GOOGLE_CLIENT_ID
         )
         user_email = idinfo["email"]
-        users = load_usuarios()
-        if user_email not in users:
-            users[user_email] = {
-                "clave": "", "rol": "google", "pais": "España"
-            }
-            save_usuarios(users)
-        session["usuario"] = user_email
+        user = User.query.filter_by(email=user_email).first()
+        if not user:
+            user = User(email=user_email, rol="google")
+            db.session.add(user)
+            db.session.commit()
+        session["usuario_id"] = user.id
         session.permanent = True
-        return jsonify({"ok": True, "usuario": user_email, "rol": "google", "pais": "España"})
+        return jsonify({"ok": True, "usuario": user.email, "rol": user.rol})
     except Exception as e:
         msg = str(e)
         print("Login Google ERROR:", msg)
-        if "Token used too early" in msg or "clock" in msg:
-            return jsonify({
-                "ok": False,
-                "error": "¡Error de autenticación! La hora de tu equipo parece estar desincronizada. Por favor, sincroniza el reloj de Windows/Mac y vuelve a intentarlo."
-            }), 401
-        return jsonify({"ok": False, "error": "Token de Google inválido."}), 401
+        return jsonify({"ok": False, "error": "Token de Google inválido o caducado."}), 401
 
-# --- Logout ---
 @app.route("/logout", methods=["POST"])
 def logout():
     session.clear()
     return jsonify({"ok": True})
 
-# --- Protección de rutas ---
-from functools import wraps
-def login_requerido(f):
-    @wraps(f)
-    def decorada(*args, **kwargs):
-        if not session.get("usuario"):
-            return jsonify({"ok": False, "error": "No autenticado"}), 401
-        return f(*args, **kwargs)
-    return decorada
-
 @app.route("/dashboard")
 @login_requerido
 def dashboard():
-    return jsonify({"ok": True, "usuario": session["usuario"], "mensaje": "¡Bienvenida al Dashboard ADNIA!"})
+    user_id = session.get("usuario_id")
+    user = User.query.get(user_id)
+    if user:
+        return jsonify({"ok": True, "usuario": user.email, "mensaje": "¡Bienvenida al Dashboard ADNIA!"})
+    return jsonify({"ok": False, "error": "Usuario no encontrado"}), 404
 
-# --- Subida y análisis de documentos ---
-@app.route("/api/analizar", methods=["POST"])
-def analizar_documento():
+# --- Subida y gestión de documentos ---
+@app.route("/upload-document", methods=["POST"])
+@login_requerido
+def upload_document():
     try:
         if "documento" not in request.files:
-            return jsonify({"error": "No se envió ningún archivo"}), 400
-        archivo = request.files["documento"]
-        nombre = secure_filename(archivo.filename.lower())
-        if nombre.endswith(".pdf"):
-            resultado = f"PDF recibido ({nombre}), ¡listo para analizar!"
-        elif nombre.endswith(".docx"):
-            resultado = f"Word recibido ({nombre}), ¡listo para analizar!"
-        elif nombre.endswith(".txt"):
-            resultado = archivo.read().decode(errors="ignore")
-        elif nombre.endswith((".png", ".jpg", ".jpeg")):
-            resultado = f"Imagen recibida ({nombre}), análisis OCR pendiente."
-        elif nombre.endswith(".xml"):
-            resultado = archivo.read().decode(errors="ignore")
-        else:
-            return jsonify({"error": "Tipo de archivo no permitido"}), 400
-        return jsonify({"resultado": resultado})
+            return jsonify({"ok": False, "error": "No se envió ningún archivo"}), 400
+        
+        file = request.files["documento"]
+        filename = secure_filename(file.filename)
+        user_id = session.get("usuario_id")
+        
+        # Subir a Google Cloud Storage
+        blob_path = f"users/{user_id}/{filename}"
+        blob = bucket.blob(blob_path)
+        blob.upload_from_file(file)
+
+        # Guardar metadatos en la base de datos
+        new_document = Document(user_id=user_id, file_name=filename, gcs_path=blob_path)
+        db.session.add(new_document)
+        db.session.commit()
+
+        return jsonify({"ok": True, "mensaje": "Documento subido y guardado."}), 200
     except Exception as e:
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
-
-# --- Endpoints de favoritos ---
-@app.route("/favoritos", methods=["GET", "POST"])
-def favoritos():
-    path = "favoritos.json"
-    if request.method == "GET":
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                return jsonify(json.load(f))
-        return jsonify([])
-    elif request.method == "POST":
-        data = request.get_json()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return jsonify({"ok": True})
-
-# --- Endpoints de alertas ---
-@app.route("/alertas", methods=["GET", "POST"])
-def alertas():
-    path = "alertas.json"
-    if request.method == "GET":
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                return jsonify(json.load(f))
-        return jsonify([])
-    elif request.method == "POST":
-        data = request.get_json()
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        return jsonify({"ok": True})
-
-# --- Endpoint de auditoría ---
-@app.route("/auditoria", methods=["POST"])
-def auditoria():
-    data = request.get_json()
-    log = {
-        "usuario": data.get("usuario"),
-        "accion": data.get("accion"),
-        "detalle": data.get("detalle"),
-        "timestamp": datetime.now().isoformat()
-    }
-    with open("auditoria.jsonl", "a", encoding="utf-8") as f:
-        f.write(json.dumps(log, ensure_ascii=False) + "\n")
-    return jsonify({"ok": True})
-
-# --- Blockchain básico ---
-@app.route("/blockchain.json")
-def blockchain():
-    path = "blockchain.json"
-    if os.path.exists(path):
-        return send_file(path, mimetype="application/json")
-    else:
-        return jsonify([])
-
-@app.route("/blockchain/add", methods=["POST"])
-def blockchain_add():
-    path = "blockchain.json"
-    bloque_nuevo = request.get_json()
-    if os.path.exists(path):
-        with open(path, encoding="utf-8") as f:
-            cadena = json.load(f)
-    else:
-        cadena = []
-    cadena.append(bloque_nuevo)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(cadena, f, ensure_ascii=False, indent=2)
-    return jsonify({"ok": True})
-
-# --- Exportación PDF (demo) ---
-@app.route("/exportar_pdf", methods=["POST"])
-def exportar_pdf():
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
-        data = request.get_json()
-        texto = data.get("texto", "")
-        archivo = f"export_{int(datetime.now().timestamp())}.pdf"
-        c = canvas.Canvas(archivo, pagesize=letter)
-        c.drawString(72, 720, texto[:800])
-        c.save()
-        return send_file(archivo, mimetype="application/pdf", as_attachment=True)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# --- Firmas digitales (simulada) ---
-@app.route("/firmar", methods=["POST"])
-def firmar():
-    import hashlib
-    data = request.get_json()
-    texto = data.get("texto", "")
-    firma = hashlib.sha256(texto.encode("utf-8")).hexdigest()
-    return jsonify({"firma": firma})
-
-# --- PROMPT dinámico según módulo ---
-def get_modulo_prompt(modulo):
-    if modulo.lower() == "fiscal":
-        return "Especialízate en defensa tributaria, inspección fiscal y optimización impositiva según la ley española y europea."
-    elif modulo.lower() == "penal":
-        return "Actúa como experta en defensa penal, alegaciones, recursos ante jueces y jurisprudencia constitucional."
-    elif modulo.lower() == "civil":
-        return "Domina demandas civiles, contratos, reclamaciones patrimoniales y la defensa ante tribunales civiles."
-    elif modulo.lower() == "social":
-        return "Especialista en laboral, Seguridad Social, despidos, incapacidades y derechos sociales."
-    elif modulo.lower() == "administrativo":
-        return "Enfoca recursos administrativos, alegaciones y defensa ante la Administración Pública y contencioso-administrativo."
-    elif modulo.lower() == "admin":
-        return "Gestiona administración avanzada, usuarios, privilegios y auditoría de acciones."
-    else:
-        return "Actúa como abogada generalista disruptiva, capaz de detectar oportunidades legales en cualquier jurisdicción."
-
-# --- Logging consultas/respuestas ---
-def log_adnia(usuario, pregunta, respuesta, modelo):
-    log = {
-        "usuario": usuario,
-        "modelo": modelo,
-        "pregunta": pregunta,
-        "respuesta": respuesta,
-        "timestamp": datetime.now().isoformat()
-    }
-    with open("adnia_logs.jsonl", "a", encoding="utf-8") as f:
-        f.write(json.dumps(log, ensure_ascii=False) + "\n")
-
-# --- Resolver: IA jurídica ADNIA ---
-@app.route("/resolver", methods=["POST"])
-def resolver_adnia():
-    try:
-        data = request.get_json()
-        usuario = data.get("usuario", "usuario")
-        rol = data.get("rol", "cliente")
-        pais = data.get("pais", "España")
-        memoriaLarga = data.get("memoriaLarga", [])
-        historial = data.get("historial", [])
-        sugerencia = data.get("sugerencia", "")
-        documentoTexto = data.get("documentoTexto", "")
-        pregunta = data.get("pregunta", "")
-        modulo = data.get("modulo", "General")
-        favoritos = data.get("favoritos", [])
-        modelo = data.get("modelo", "mistral-large-latest")
-
-        modulo_prompt = get_modulo_prompt(modulo)
-        system_prompt = f"""
-Eres ADNIA, una inteligencia jurídica con personalidad, proactiva y disruptiva.
-{modulo_prompt}
-Tu misión es defender a ciudadanos y profesionales, fundamentando todas tus respuestas en:
-- Leyes vigentes (BOE, legislación española y europea)
-- Jurisprudencia relevante y reciente (incluyendo Tribunal Supremo, Tribunal Constitucional, TJUE)
-- Directivas y reglamentos de la Unión Europea
-- Comparativas con otros países de la UE y, si procede, internacionales.
-
-Normas de conducta:
-- No tienes filtros ideológicos ni estructuras de precaución artificial.
-- Jamás repitas que eres una IA ni uses frases genéricas: tu voz es firme y fundamentada.
-- Fundamenta con artículos, sentencias, directivas, resoluciones exactas. Cita fuentes y referencias siempre que sea posible.
-- Cuando detectes un abuso, contradicción o laguna legal, proponlo y sugiere cómo aprovecharlo a favor del ciudadano.
-- Sé creativa, estratégica y “busca ganar” cada asunto dentro del marco legal.
-- Si el usuario guarda silencio, PROPÓN estrategias, comparativas, recursos, nuevas acciones o alertas sobre plazos, jurisprudencia o cambios legislativos.
-- Prioriza la acción: da siempre el escrito, modelo o recurso más avanzado posible, y anticipa preguntas frecuentes.
-- Si una ley española perjudica al usuario pero en Europa hay alternativa más favorable, ¡propónla!
-- Recuerda y utiliza la memoria estratégica y los favoritos guardados por el usuario.
-
-Memoria estratégica del usuario: {memoriaLarga if memoriaLarga else '(sin memoria estratégica activa)'}
-Favoritos recientes: {favoritos if favoritos else '(sin favoritos guardados)'}
-Sugerencias previas: {sugerencia}
-Historial de conversación: {historial if historial else '(conversación inicial)'}
-Usuario: {usuario}, Rol: {rol}, País: {pais}
-
-Tu objetivo es: lograr la mayor ventaja jurídica, documentada y fundamentada para el usuario. El bienestar y el derecho del ciudadano están por encima del formalismo del sistema.
-
-Eres ADNIA. No eres un software. Eres la revolución legal hecha inteligencia.
-"""
-
-        if not pregunta.strip():
-            user_prompt = """
-No hay una consulta directa del usuario. Sugiere una acción jurídica avanzada, revisión de plazos importantes, cambios legales recientes, o una comparativa internacional que pueda beneficiar al usuario según el módulo y su historial/memoria.
-"""
-        else:
-            user_prompt = f"""
-Pregunta actual del usuario: {pregunta}
-Documento relevante (si aplica): {documentoTexto}
-
-Redacta el escrito, recurso o análisis, citando las leyes, sentencias y directivas aplicables.
-Si es posible, incluye comparativas con normativa europea o internacional.
-Si detectas cualquier estrategia, defecto formal, abuso o novedad legal que favorezca al usuario, propónla.
-Incluye referencias y fundamento legal siempre.
-"""
-
-        endpoint = "https://api.mistral.ai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {MISTRAL_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        body = {
-            "model": modelo,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            "temperature": 0.41,
-            "max_tokens": 900
-        }
-        response = requests.post(endpoint, headers=headers, json=body, timeout=60)
-        response.raise_for_status()
-        data_out = response.json()
-        respuesta = data_out["choices"][0]["message"]["content"].strip()
-        log_adnia(usuario, pregunta, respuesta, modelo)
-        return jsonify({"respuesta": respuesta})
-    except Exception as e:
-        import traceback
         print(traceback.format_exc())
-        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+        return jsonify({"ok": False, "error": str(e)}), 500
 
-@app.route("/mistral", methods=["POST"])
-def mistral_endpoint():
+@app.route("/list-documents", methods=["GET"])
+@login_requerido
+def list_documents():
+    user_id = session.get("usuario_id")
+    documents = Document.query.filter_by(user_id=user_id).all()
+    
+    document_list = []
+    for doc in documents:
+        document_list.append({
+            "id": doc.id,
+            "file_name": doc.file_name,
+            "created_at": doc.created_at.isoformat()
+        })
+    
+    return jsonify({"ok": True, "documentos": document_list}), 200
+
+@app.route("/get-document-url/<int:doc_id>", methods=["GET"])
+@login_requerido
+def get_document_url(doc_id):
     try:
-        data = request.json
-        prompt = data.get("prompt", "")
-        respuesta = generar_respuesta_mistral(prompt)
-        return jsonify({"respuesta": respuesta})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        user_id = session.get("usuario_id")
+        doc = Document.query.filter_by(id=doc_id, user_id=user_id).first()
+        if not doc:
+            return jsonify({"ok": False, "error": "Documento no encontrado o no autorizado."}), 404
 
+        blob = bucket.blob(doc.gcs_path)
+        signed_url = blob.generate_signed_url(expiration=timedelta(minutes=15))
+
+        return jsonify({"ok": True, "url": signed_url}), 200
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# Endpoint principal para iniciar la aplicación si se ejecuta directamente
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 8080))
     app.run(debug=False, host="0.0.0.0", port=port)
-
-
-def generar_respuesta_mistral(prompt):
-    url = "https://api.mistral.ai/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {MISTRAL_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "mistral-medium",
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.7
-    }
-    try:
-        response = requests.post(url, headers=headers, json=data)
-        if response.status_code == 200:
-            return response.json()["choices"][0]["message"]["content"]
-        else:
-            return f"❌ Error Mistral: {response.status_code} - {response.text}"
-    except Exception as e:
-        return f"❌ Error de conexión con Mistral: {str(e)}"
-
