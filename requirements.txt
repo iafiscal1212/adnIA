@@ -16,6 +16,7 @@ distlib==0.3.9
 distro==1.7.0
 filelock==3.18.0
 Flask==3.1.0
+Flask-SQLAlchemy
 flask-bcrypt==1.0.1
 flask-cors==5.0.1
 flask-session==0.8.0
