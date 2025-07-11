@@ -3,6 +3,7 @@ import re
 import json
 import traceback
 from flask import Flask, request, jsonify, session, send_file
+from flask_session import Session 
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -13,6 +14,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from flask_sqlalchemy import SQLAlchemy
 from google.cloud import storage
+from functools import wraps
 
 load_dotenv()
 
@@ -84,21 +86,6 @@ def create_db_tables():
         print("Tablas verificadas/creadas.")
 
 # --- Endpoints ---
-
-# Endpoint de administración para crear tablas
-@app.route("/admin/create-tables", methods=['POST'])
-def admin_create_tables():
-    provided_key = request.headers.get('X-Admin-Secret-Key')
-    if provided_key != ADMIN_SECRET_KEY:
-        return jsonify({"ok": False, "error": "Acceso no autorizado"}), 401
-    
-    try:
-        create_db_tables()
-        return jsonify({"ok": True, "message": "Tablas verificadas/creadas."}), 200
-    except Exception as e:
-        print(f"Error en /admin/create-tables: {traceback.format_exc()}")
-        return jsonify({"ok": False, "error": f"Error al crear tablas: {str(e)}"}), 500
-
 @app.route("/")
 def home():
     return send_file("static/index.html")
@@ -208,7 +195,24 @@ def get_document_url(doc_id):
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+# Endpoint de administración para crear tablas
+@app.route("/admin/create-tables", methods=['POST'])
+def admin_create_tables():
+    provided_key = request.headers.get('X-Admin-Secret-Key')
+    if provided_key != ADMIN_SECRET_KEY:
+        return jsonify({"ok": False, "error": "Acceso no autorizado"}), 401
+    
+    try:
+        create_db_tables()
+        return jsonify({"ok": True, "message": "Tablas verificadas/creadas."}), 200
+    except Exception as e:
+        print(f"Error en /admin/create-tables: {traceback.format_exc()}")
+        return jsonify({"ok": False, "error": f"Error al crear tablas: {str(e)}"}), 500
+
+
 # Endpoint principal para iniciar la aplicación si se ejecuta directamente
 if __name__ == "__main__":
+    with app.app_context():
+        create_db_tables()
     port = int(os.environ.get("PORT", 8080))
     app.run(debug=False, host="0.0.0.0", port=port)
