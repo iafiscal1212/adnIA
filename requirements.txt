@@ -29,19 +29,18 @@ pyHanko==0.26.0
 pyhanko-certvalidator==0.26.8
 PyMuPDF==1.25.5
 pyparsing==3.2.3
-pypdf==5.4.0
+pypdf==4.3.1
 pyphen==0.17.2
 pyresparser==1.0.6
 python-bidi==0.6.6
 python-dateutil==2.9.0.post0
 python-docx==1.1.2
-fix/database-config
 python-dotenv==1.0.1
 
 # LangChain y IA
 langchain==0.2.1
 langchain-openai==0.1.7
-langchain-community==0.2.1
+langchain-community==0.2.7
 
 # Herramientas para análisis de documentos
 pypdf==4.2.0
