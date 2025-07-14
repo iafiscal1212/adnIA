@@ -19,7 +19,7 @@ from functools import wraps
 load_dotenv()
 
 # Variables de entorno
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////tmp/adnia.db")
 SECRET_KEY = os.getenv("SECRET_KEY", "default_secret_key_for_prod")
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
@@ -31,7 +31,7 @@ app = Flask(__name__)
 
 # Configuración de base de datos
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = os.getenv('SQLALCHEMY_TRACK_MODIFICATIONS', 'False').lower() in ('true', '1', 't')
 db = SQLAlchemy(app)
 
 # Configuración de sesiones
