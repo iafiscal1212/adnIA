@@ -39,7 +39,7 @@ python-dotenv==1.0.1
 
 # LangChain y IA
 langchain==0.3.0
-langchain-community==0.2.7
+langchain-community==0.3.0
 langchain-openai==0.3.0 
 
 # Herramientas para análisis de documentos
