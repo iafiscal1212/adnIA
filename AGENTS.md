@@ -19,6 +19,7 @@ Para desplegar esta aplicación en Google Cloud Run, es crucial configurar las s
 *   `GOOGLE_CLIENT_SECRET`: El secreto de cliente de OAuth 2.0 de Google.
 *   `GCS_BUCKET_NAME`: El nombre del bucket de Google Cloud Storage donde se almacenan los documentos.
 *   `ADMIN_SECRET_KEY`: Una clave secreta para acceder a los endpoints de administración.
+*   `OPENAI_API_KEY`: Tu clave de API de OpenAI para que los agentes de LangChain puedan acceder a los modelos de lenguaje.
 
 ### Ejemplo de Configuración en `gcloud`
 

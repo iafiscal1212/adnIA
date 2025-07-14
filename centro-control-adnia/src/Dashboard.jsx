@@ -14,10 +14,13 @@ const modulos = [
 
 const fraseADNIA = '“Aquí no obedecemos a la ignorancia disfrazada de ley...”';
 
+import ChatInterface from "./ChatInterface";
+
 function Dashboard({ onLogout }) {
   const navigate = useNavigate();
   const [frase, setFrase] = useState("");
   const fraseRef = useRef(null);
+  const [activeChat, setActiveChat] = useState(null); // Estado para controlar la vista de chat
 
   // Efecto typing en la frase
   useEffect(() => {
@@ -101,21 +104,25 @@ function Dashboard({ onLogout }) {
           <span className="typing-cursor" style={{ color: "#00ffd9" }}>|</span>
         </div>
 
-        {/* Módulos: responsive grid */}
-        <div className="adnia-modules-grid">
-          {modulos.map(mod =>
-            <a
-              key={mod.nombre}
-              href={mod.path}
-              className="adnia-module-card"
-              tabIndex={0}
-              style={{ outline: "none" }}
-            >
-              <span className="adnia-module-icon">{mod.icon}</span>
-              <span className="adnia-module-label">{mod.nombre}</span>
-            </a>
-          )}
-        </div>
+        {/* Módulos o Interfaz de Chat */}
+        {activeChat ? (
+          <ChatInterface initialJurisdiction={activeChat} onBack={() => setActiveChat(null)} />
+        ) : (
+          <div className="adnia-modules-grid">
+            {modulos.map(mod =>
+              <div
+                key={mod.nombre}
+                className="adnia-module-card"
+                tabIndex={0}
+                style={{ outline: "none", cursor: 'pointer' }}
+                onClick={() => setActiveChat(mod.nombre)}
+              >
+                <span className="adnia-module-icon">{mod.icon}</span>
+                <span className="adnia-module-label">{mod.nombre}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Botón cerrar sesión */}
         <button
