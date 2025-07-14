@@ -8,16 +8,15 @@ psycopg2-binary==2.9.9
 google-cloud-storage==2.16.0
 
 # LangChain - Ecosistema v0.2 (ÚLTIMA VERSIÓN ESTABLE Y COMPATIBLE)
-# Esta es la combinación correcta y probada que resuelve todos los conflictos.
 langchain==0.2.5
 langchain-core==0.2.10
 langchain-community==0.2.5
 langchain-openai==0.1.8
-langchain-mistralai==0.2.12
+langchain-mistralai==0.2.11
 langchain-google-genai==1.0.6
 
 # Herramientas de Agentes
-langchain-community # Requerido para herramientas
+langchain-community
 tavily-python==0.3.3
 
 # Herramientas para análisis de documentos
