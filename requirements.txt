@@ -9,7 +9,7 @@ python-dotenv==1.0.1
 psycopg2-binary==2.9.9
 werkzeug==3.0.3
 
-# LangChain - "Golden" Stable Configuration
+# LangChain - Configuración Estable
 langchain==0.1.20
 langchain-core==0.1.52
 langchain-community==0.0.38
@@ -18,15 +18,22 @@ langchain-mistralai==0.1.6
 langchain-google-genai==1.0.4
 
 # Herramientas de Agentes
-langchain-community
 tavily-python==0.3.3
 
-# Herramientas para análisis de documentos (VERSIÓN LOCAL)
+# Humanizador y otras utilidades
+requests==2.32.3
+
+# Google Cloud
+google-cloud-storage==2.16.0
+
+# Dependencias de GPU y Análisis de Documentos
+# Indicamos a pip que instale la versión de PyTorch para CUDA 12.1
+--extra-index-url https://download.pytorch.org/whl/cu121
+torch==2.2.0
+torchvision==0.17.0
+torchaudio==2.2.0
+# Ahora unstructured usará la versión de torch para GPU que acabamos de instalar
 unstructured[local-inference]
 pypdf
 pillow
 pytesseract
-
-# Google Cloud y Humanizador
-google-cloud-storage==2.16.0
-requests==2.32.3
