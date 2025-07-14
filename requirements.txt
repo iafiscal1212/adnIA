@@ -25,6 +25,7 @@ requests==2.32.3
 
 # Google Cloud
 google-cloud-storage==2.16.0
+google-cloud-vision==3.7.2
 
 # Dependencias de GPU y Análisis de Documentos
 # Indicamos a pip que instale la versión de PyTorch para CUDA 12.1
