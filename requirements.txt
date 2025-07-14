@@ -40,7 +40,7 @@ python-dotenv==1.0.1
 google-cloud-storage==2.16.0
 
 # LangChain y IA
-langchain==0.3.0
+langchain==0.2.1
 langchain-openai==0.3.0
 langchain-mistralai
 langchain-google-genai
