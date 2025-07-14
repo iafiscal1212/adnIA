@@ -1,14 +1,18 @@
-# Flask y Servidor
+# Flask y extensiones
 Flask==3.0.3
-Flask-Bcrypt
-Flask-Cors
-Flask-Session
+Flask-SQLAlchemy==3.1.1
+Flask-Bcrypt==1.0.1
+Flask-Cors==4.0.1
+Flask-Session==0.8.0
 gunicorn==22.0.0
-python-dotenv==1.0.1
+html5lib==1.1
+itsdangerous==2.2.0
+Jinja2==3.1.6
+lxml==5.4.0
+MarkupSafe==3.0.2
 psycopg2-binary==2.9.9
-
-# Google Cloud
-google-cloud-storage==2.16.0
+python-dotenv==1.0.1
+werkzeug==3.0.3
 
 # LangChain - "Golden" Stable Configuration
 langchain==0.1.20
@@ -19,7 +23,7 @@ langchain-mistralai==0.1.6
 langchain-google-genai==1.0.4
 
 # Herramientas de Agentes
-langchain-community
+langchain-community # Requerido para herramientas
 tavily-python==0.3.3
 
 # Herramientas para análisis de documentos
@@ -28,5 +32,8 @@ pypdf
 pillow
 pytesseract
 
-# Humanizador
-requests
+# Google Cloud
+google-cloud-storage==2.16.0
+
+# Humanizador y otras utilidades
+requests==2.32.3
