@@ -45,7 +45,6 @@ langchain-openai==0.3.0
 # Herramientas para análisis de documentos
 pypdf==4.2.0
 unstructured[local-inference]==0.14.4
-pillow==10.3.0
 pytesseract==0.3.10
 
 # Google Cloud y base de datos
