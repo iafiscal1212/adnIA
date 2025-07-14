@@ -1,5 +1,8 @@
 # Flask y Servidor
 Flask==3.0.3
+Flask-Bcrypt
+Flask-Cors
+Flask-Session
 gunicorn==22.0.0
 python-dotenv==1.0.1
 psycopg2-binary==2.9.9
@@ -7,8 +10,7 @@ psycopg2-binary==2.9.9
 # Google Cloud
 google-cloud-storage==2.16.0
 
-# LangChain - "Golden" Stable Configuration (Enero/Febrero 2024)
-# Este es un conjunto de versiones estables y 100% compatibles entre sí.
+# LangChain - "Golden" Stable Configuration
 langchain==0.1.20
 langchain-core==0.1.52
 langchain-community==0.0.38
