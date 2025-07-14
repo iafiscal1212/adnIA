@@ -7,13 +7,14 @@ psycopg2-binary==2.9.9
 # Google Cloud
 google-cloud-storage==2.16.0
 
-# LangChain - Ecosistema v0.2 (ÚLTIMA VERSIÓN ESTABLE Y COMPATIBLE)
-langchain==0.2.5
-langchain-core==0.2.10
-langchain-community==0.2.5
-langchain-openai==0.1.8
-langchain-mistralai==0.2.11
-langchain-google-genai==1.0.6
+# LangChain - "Golden" Stable Configuration (Enero/Febrero 2024)
+# Este es un conjunto de versiones estables y 100% compatibles entre sí.
+langchain==0.1.20
+langchain-core==0.1.52
+langchain-community==0.0.38
+langchain-openai==0.1.6
+langchain-mistralai==0.1.6
+langchain-google-genai==1.0.4
 
 # Herramientas de Agentes
 langchain-community
