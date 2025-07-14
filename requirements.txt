@@ -55,7 +55,8 @@ PyMuPDF==1.25.5
 pyparsing==3.2.3
 pypdf==5.4.0
 pyphen==0.17.2
-pytesseract==0.3.13
+pytesseract
+pyresparser==1.0.6
 python-bidi==0.6.6
 python-dateutil==2.9.0.post0
 python-docx==1.1.2
