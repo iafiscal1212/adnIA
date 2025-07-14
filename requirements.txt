@@ -43,7 +43,7 @@ google-cloud-storage==2.16.0
 langchain==0.2.1
 langchain-community==0.2.1
 langchain-openai==0.1.7
-langchain-mistralai==0.1.6
+langchain-mistralai==0.2.11
 langchain-google-genai==1.0.5
 
 # Herramienta de búsqueda web para agentes
