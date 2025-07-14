@@ -70,6 +70,17 @@ class Document(db.Model):
     def __repr__(self):
         return f'<Document {self.file_name}>'
 
+class ChatHistory(db.Model):
+    __tablename__ = 'adnia_chat_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('adnia_users.id'), nullable=False)
+    conversation_id = db.Column(db.String(100), nullable=False)
+    message = db.Column(db.JSON, nullable=False) # Guardará {"role": "user/assistant", "content": "..."}
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<ChatHistory {self.id} user {self.user_id}>'
+
 # --- Utilidades generales ---
 def login_requerido(f):
     @wraps(f)
@@ -208,6 +219,66 @@ def admin_create_tables():
     except Exception as e:
         print(f"Error en /admin/create-tables: {traceback.format_exc()}")
         return jsonify({"ok": False, "error": f"Error al crear tablas: {str(e)}"}), 500
+
+
+from adnia_agents import run_agent_chat
+from langchain_core.messages import HumanMessage, AIMessage
+import uuid
+
+# --- API de Chat con Agentes ---
+@app.route("/api/chat", methods=["POST"])
+@login_requerido
+def handle_chat():
+    try:
+        data = request.get_json()
+        message_text = data.get("message")
+        conversation_id = data.get("conversation_id") or str(uuid.uuid4())
+        file_path = data.get("file_path") # Se espera una ruta en GCS o local temporal
+        user_id = session.get("usuario_id")
+
+        if not message_text:
+            return jsonify({"ok": False, "error": "El mensaje no puede estar vacío."}), 400
+
+        # Recuperar historial de la base de datos
+        history_records = ChatHistory.query.filter_by(user_id=user_id, conversation_id=conversation_id).order_by(ChatHistory.created_at).all()
+        chat_history = []
+        for record in history_records:
+            if record.message['role'] == 'user':
+                chat_history.append(HumanMessage(content=record.message['content']))
+            else:
+                chat_history.append(AIMessage(content=record.message['content']))
+
+        # Guardar mensaje del usuario
+        user_message_record = ChatHistory(user_id=user_id, conversation_id=conversation_id, message={"role": "user", "content": message_text})
+        db.session.add(user_message_record)
+
+        # Ejecutar el agente
+        response_text = run_agent_chat(message_text, chat_history, file_path)
+
+        # Guardar respuesta del asistente
+        ai_message_record = ChatHistory(user_id=user_id, conversation_id=conversation_id, message={"role": "assistant", "content": response_text})
+        db.session.add(ai_message_record)
+
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "response": response_text,
+            "conversation_id": conversation_id
+        }), 200
+
+    except Exception as e:
+        print(traceback.format_exc())
+        db.session.rollback()
+        return jsonify({"ok": False, "error": f"Error interno del servidor: {str(e)}"}), 500
+
+@app.route("/api/chat/history", methods=["GET"])
+@login_requerido
+def get_chat_history():
+    user_id = session.get("usuario_id")
+    conversations = db.session.query(ChatHistory.conversation_id).filter_by(user_id=user_id).distinct().all()
+    conv_ids = [c[0] for c in conversations]
+    return jsonify({"ok": True, "conversations": conv_ids})
 
 
 # Endpoint principal para iniciar la aplicación si se ejecuta directamente
