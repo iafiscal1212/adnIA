@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADNIA - Chat Jurídico</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #header { padding: 10px 20px; background-color: #222; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #00ff00;}
+        #chat-title { color: #00ff00; margin: 0;}
+        .controls { display: flex; align-items: center; gap: 20px; }
+        #model-selector { background-color: #333; color: white; border: 1px solid #00ff00; padding: 5px 10px; border-radius: 5px; }
+        .switch-container { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: #00ff00;}
+        .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 20px; }
+        .slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #00ff00; }
+        input:checked + .slider:before { transform: translateX(20px); }
+        #chat-container { flex-grow: 1; overflow-y: auto; padding: 20px; }
+        .message { max-width: 80%; margin-bottom: 15px; padding: 10px 15px; border-radius: 18px; line-height: 1.5; white-space: pre-wrap; }
+        .user-message { background-color: #005500; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
+        .ai-message { background-color: #333; color: #e0e0e0; margin-right: auto; border-bottom-left-radius: 4px; }
+        #input-area { display: flex; padding: 10px; border-top: 1px solid #00ff00; }
+        #chat-input { flex-grow: 1; background-color: #333; color: white; border: 1px solid #555; border-radius: 20px; padding: 10px 15px; font-size: 1rem; }
+        #send-button { background-color: #00ff00; color: #000; border: none; border-radius: 50%; width: 45px; height: 45px; margin-left: 10px; cursor: pointer; font-size: 1.5rem; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <h1 id="chat-title">Consultando...</h1>
+        <div class="controls">
+            <div class="switch-container">
+                <span>Modo HumanShield</span>
+                <label class="switch">
+                    <input type="checkbox" id="humanize-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <select id="model-selector">
+                <option value="openai">OpenAI (GPT-4o)</option>
+                <option value="gemini">Google (Gemini)</option>
+                <option value="mistral">Mistral (Large)</option>
+            </select>
+        </div>
+    </div>
+    <div id="chat-container"></div>
+    <div id="input-area">
+        <input type="text" id="chat-input" placeholder="Escribe tu consulta aquí...">
+        <button id="send-button">➤</button>
+    </div>
+
+    <script>
+        const chatContainer = document.getElementById('chat-container');
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const chatTitle = document.getElementById('chat-title');
+        const modelSelector = document.getElementById('model-selector');
+        const humanizeToggle = document.getElementById('humanize-toggle');
+
+        const params = new URLSearchParams(window.location.search);
+        const jurisdiction = params.get('jurisdiccion') || 'general';
+        
+        if (jurisdiction) {
+            const formattedTitle = jurisdiction.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            chatTitle.innerText = `Chat de ${formattedTitle}`;
+        }
+
+        function addMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}-message`;
+            messageDiv.innerText = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return messageDiv;
+        }
+
+        async function sendMessage() {
+            const messageText = chatInput.value.trim();
+            if (!messageText) return;
+
+            addMessage(messageText, 'user');
+            chatInput.value = '';
+            
+            const selectedModel = modelSelector.value;
+            const shouldHumanize = humanizeToggle.checked;
+            const aiResponseDiv = addMessage("", 'ai');
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: messageText,
+                        model: selectedModel,
+                        jurisdiction: jurisdiction,
+                        humanize: shouldHumanize
+                    })
+                });
+
+                if (!response.ok) throw new Error(`Error del servidor: ${response.statusText}`);
+                
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    const chunk = decoder.decode(value, { stream: true });
+                    aiResponseDiv.innerText += chunk;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                }
+
+            } catch (error) {
+                aiResponseDiv.innerText = `Error de conexión: ${error.message}`;
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
+        
+        window.addEventListener('DOMContentLoaded', () => {
+             addMessage(`¡Hola! Estás en la sección de ${jurisdiction.replace(/_/g, ' ')}. Elige un modelo, activa o desactiva HumanShield y haz tu consulta.`, 'ai');
+        });
+    </script>
+</body>
+</html>

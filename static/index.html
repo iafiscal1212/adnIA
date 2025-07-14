@@ -214,7 +214,7 @@
         <div class="buttons">
             <a href="/ping" class="btn">🔍 Verificar Estado</a>
             <a href="/dashboard" class="btn">📊 Dashboard</a>
-            <a href="/resolver" class="btn">⚡ Consultar IA</a>
+            <a href="/chat.html" class="btn">⚡ Consultar IA</a>
         </div>
     </div>
     
@@ -223,7 +223,7 @@
     </div>
     
     <script>
-        // Efecto Matrix de fondo
+        // --- CÓDIGO PARA EFECTOS VISUALES ---
         function createMatrix() {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -231,7 +231,8 @@
             canvas.height = window.innerHeight;
             document.getElementById('matrix').appendChild(canvas);
             
-            const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+            // Caracteres latinos para el efecto de fondo
+            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
             const charArray = chars.split('');
             const fontSize = 14;
             const columns = canvas.width / fontSize;
@@ -244,41 +245,52 @@
             function draw() {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
                 ctx.fillStyle = '#00ff00';
                 ctx.font = fontSize + 'px monospace';
                 
                 for (let i = 0; i < drops.length; i++) {
                     const text = charArray[Math.floor(Math.random() * charArray.length)];
                     ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                    
                     if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
                         drops[i] = 0;
                     }
                     drops[i]++;
                 }
             }
-            
             setInterval(draw, 35);
         }
-        
-        // Verificar estado del sistema
-        async function checkStatus() {
-            try {
-                const response = await fetch('/ping');
-                const result = await response.text();
-                console.log('Sistema:', result === 'pong' ? 'Operativo' : 'Error');
-            } catch (error) {
-                console.log('Sistema:', 'Error de conexión');
-            }
+
+        // --- CÓDIGO PARA HACER CLICABLES LAS CAJAS ---
+        function setupJurisdictionLinks() {
+            const features = document.querySelectorAll('.feature');
+            features.forEach(feature => {
+                feature.style.cursor = 'pointer'; 
+                
+                feature.addEventListener('click', () => {
+                    const titleElement = feature.querySelector('h3');
+                    if (titleElement) {
+                        let jurisdictionText = titleElement.innerText;
+                        // Limpiar emoji y espacios
+                        jurisdictionText = jurisdictionText.replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
+                        
+                        if (jurisdictionText === 'Panel Administrativo') {
+                            window.location.href = '/dashboard';
+                        } else {
+                            // Convertir "Derecho Fiscal" a "derecho_fiscal" para la URL
+                            const urlParam = jurisdictionText.toLowerCase().replace(/ /g, '_');
+                            window.location.href = `/chat.html?jurisdiccion=${urlParam}`;
+                        }
+                    }
+                });
+            });
         }
-        
-        // Inicializar
+
+        // Inicializar todo cuando la página cargue
         document.addEventListener('DOMContentLoaded', function() {
             createMatrix();
-            checkStatus();
+            setupJurisdictionLinks();
         });
-        
+
         // Redimensionar canvas
         window.addEventListener('resize', function() {
             const canvas = document.querySelector('#matrix canvas');
@@ -290,4 +302,3 @@
     </script>
 </body>
 </html>
-
