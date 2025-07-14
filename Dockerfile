@@ -30,6 +30,8 @@ ENV PYTHONPATH=/app
 # Exponer el puerto
 EXPOSE 8080
 
-# Comando para ejecutar la aplicación
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "4", "--timeout", "120", "app:app"]
+# Comando para ejecutar la aplicación, optimizado para Cloud Run
+# Se recomienda 1 worker y gestionar la concurrencia a nivel de instancia.
+# Threads puede ser ajustado según la naturaleza de la carga (I/O vs CPU bound).
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "0", "app:app"]
 
