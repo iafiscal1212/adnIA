@@ -1,86 +1,94 @@
 import os
 import json
-import time
 from langchain_openai import ChatOpenAI
 from langchain_mistralai.chat_models import ChatMistralAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-# ¡NUEVO! Imports para Google Cloud Vision y Storage
-from google.cloud import vision
-from google.cloud import storage
-import pypdf
+# Se usan librerías locales para el análisis, que es lo que está configurado
+from langchain_community.document_loaders import PyPDFLoader
+from PIL import Image
+import pytesseract
 
 from humanshield_module_adnia import humanize_with_humbot
 
-# --- Inicialización de Clientes de Google Cloud ---
-storage_client = storage.Client()
-vision_client = vision.ImageAnnotatorClient()
-
-
-# --- ¡NUEVA HERRAMIENTA CON GOOGLE VISION! ---
+# --- Herramientas de los Agentes ---
 @tool
-def analyze_document_with_google(gcs_path: str) -> str:
+def analyze_document(file_path: str) -> str:
     """
-    Analiza el contenido de un archivo (PDF o imagen) almacenado en Google Cloud Storage (GCS)
-    utilizando la API de Google Cloud Vision y devuelve el texto extraído.
-    El input debe ser la ruta GCS del archivo, por ejemplo: 'bucket-name/path/to/file.pdf'.
+    Analiza el contenido de un archivo (PDF o imagen) localmente y devuelve el texto extraído.
     """
     try:
-        bucket_name, blob_name = gcs_path.split('/', 1)
-        
-        gcs_source_uri = f"gs://{gcs_path}"
-        gcs_destination_uri = f"gs://{bucket_name}/ocr_results/{blob_name}_"
-
-        # Determinar el tipo de archivo
-        blob = storage_client.bucket(bucket_name).get_blob(blob_name)
-        file_content = blob.download_as_bytes()
-        
-        mime_type = 'application/pdf' if blob.content_type == 'application/pdf' or blob_name.lower().endswith('.pdf') else 'image/png'
-
-        if mime_type == 'application/pdf':
-            # Proceso asíncrono para PDFs
-            feature = vision.Feature(type_=vision.Feature.Type.DOCUMENT_TEXT_DETECTION)
-            gcs_source = vision.GcsSource(uri=gcs_source_uri)
-            input_config = vision.InputConfig(gcs_source=gcs_source, mime_type=mime_type)
-            
-            gcs_destination = vision.GcsDestination(uri=gcs_destination_uri)
-            output_config = vision.OutputConfig(gcs_destination=gcs_destination, batch_size=20)
-            
-            async_request = vision.AsyncAnnotateFileRequest(
-                features=[feature], input_config=input_config, output_config=output_config
-            )
-
-            operation = vision_client.async_batch_annotate_files(requests=[async_request])
-            operation.result(timeout=420) # Esperar a que termine el proceso
-
-            # Leer el resultado del OCR desde GCS
-            bucket = storage_client.get_bucket(bucket_name)
-            blob_list = [blob for blob in bucket.list_blobs(prefix=f"ocr_results/{blob_name}_")]
-            
-            output_text = ""
-            for blob_item in blob_list:
-                json_string = blob_item.download_as_string()
-                response = json.loads(json_string)
-                for page_response in response['responses']:
-                    output_text += page_response['fullTextAnnotation']['text']
-                blob_item.delete() # Limpiar el archivo de resultados
-
-            return output_text[:8000]
-
-        else: # Para imágenes (proceso síncrono)
-            image = vision.Image(content=file_content)
-            response = vision_client.text_detection(image=image)
-            if response.error.message:
-                raise Exception(f"Error en la API de Vision: {response.error.message}")
-            return response.full_text_annotation.text[:8000]
-
+        if not os.path.exists(file_path):
+            return f"Error: El archivo no se encuentra en la ruta: {file_path}"
+        if file_path.lower().endswith('.pdf'):
+            pages = PyPDFLoader(file_path).load_and_split()
+            return "".join(page.page_content for page in pages)[:8000]
+        elif file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+            return pytesseract.image_to_string(Image.open(file_path))[:8000]
+        else:
+            return "Error: Formato de archivo no soportado."
     except Exception as e:
-        return f"Error al analizar el documento con Google Vision: {e}"
+        return f"Error al procesar el archivo: {e}"
 
-# ... (El resto de tu código de adnia_agents.py con las herramientas de búsqueda, etc., se mantiene igual)
-# Asegúrate de añadir la nueva herramienta a tu lista `tools`.
-tools = [analyze_document_with_google, buscar_en_boe, ...]
+buscar_en_boe = TavilySearchResults(max_results=3, name="buscar_en_boe", description="Busca en el Boletín Oficial del Estado (BOE).")
+buscar_en_boe.search_kwargs = {"query_prefix": "site:boe.es"}
+
+# ... (otras herramientas de búsqueda)
+
+tools = [analyze_document, buscar_en_boe]
+
+# --- Fábrica de LLMs ---
+def get_llm(model_provider: str):
+    # (Esta función se mantiene como en la versión anterior)
+    api_key_map = {"openai": "OPENAI_API_KEY", "mistral": "MISTRAL_API_KEY"}
+    api_key = os.getenv(api_key_map.get(model_provider))
+    if not api_key and model_provider not in ["gemini"]:
+        raise ValueError(f"Falta la variable de entorno: {api_key_map.get(model_provider)}")
+    if model_provider == "openai":
+        return ChatOpenAI(api_key=api_key, temperature=0.7, model="gpt-4o")
+    elif model_provider == "mistral":
+        return ChatMistralAI(api_key=api_key, model="mistral-large-latest", temperature=0.7)
+    elif model_provider == "gemini":
+        return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
+    return ChatOpenAI(api_key=os.getenv("OPENAI_API_KEY"), temperature=0.7, model="gpt-4o")
+
+# --- ¡NUEVO! Plantilla de Prompt Corregida ---
+# Esta es la estructura correcta que espera la función del agente
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system",
+         "Eres ADNIA, una IA experta en derecho español y europeo. Tu especialidad es: {jurisdiccion}.\n"
+         "Responde a las consultas del usuario de manera precisa y directa. Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar."),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ]
+)
+
+# --- ¡NUEVO! Creación de Agentes Corregida ---
+def get_agent_executor(jurisdiction: str, model_provider: str):
+    llm = get_llm(model_provider)
+    # Pasamos solo la jurisdicción. El agente se encargará del resto de variables.
+    agent_prompt = prompt.partial(jurisdiccion=jurisdiction)
+    agent = create_structured_chat_agent(llm, tools, agent_prompt)
+    return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+
+# --- Función Principal de Chat (sin cambios) ---
+def run_agent_chat_and_humanize(message: str, chat_history: list, jurisdiction: str, model_provider: str, humanize: bool):
+    agent_executor = get_agent_executor(jurisdiction, model_provider)
+    agent_input = {"input": message, "chat_history": chat_history}
+    response = agent_executor.invoke(agent_input)
+    raw_output = response.get("output", "El agente no produjo una respuesta.")
+    if humanize:
+        yield "Humanizando con HumanShield... "
+        humanized_result = humanize_with_humbot(raw_output)
+        if "error" in humanized_result:
+            yield f"\n\n[Error del humanizador: {humanized_result['error']}]"
+        else:
+            yield humanized_result.get("humanized", raw_output)
+    else:
+        yield raw_output
