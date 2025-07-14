@@ -8,7 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-# Se usan librerías locales para el análisis, que es lo que está configurado
+# Librerías para procesamiento local
 from langchain_community.document_loaders import PyPDFLoader
 from PIL import Image
 import pytesseract
@@ -37,47 +37,48 @@ def analyze_document(file_path: str) -> str:
 buscar_en_boe = TavilySearchResults(max_results=3, name="buscar_en_boe", description="Busca en el Boletín Oficial del Estado (BOE).")
 buscar_en_boe.search_kwargs = {"query_prefix": "site:boe.es"}
 
-# ... (otras herramientas de búsqueda)
-
 tools = [analyze_document, buscar_en_boe]
 
 # --- Fábrica de LLMs ---
 def get_llm(model_provider: str):
-    # (Esta función se mantiene como en la versión anterior)
-    api_key_map = {"openai": "OPENAI_API_KEY", "mistral": "MISTRAL_API_KEY"}
-    api_key = os.getenv(api_key_map.get(model_provider))
-    if not api_key and model_provider not in ["gemini"]:
-        raise ValueError(f"Falta la variable de entorno: {api_key_map.get(model_provider)}")
     if model_provider == "openai":
-        return ChatOpenAI(api_key=api_key, temperature=0.7, model="gpt-4o")
+        return ChatOpenAI(temperature=0.7, model="gpt-4o")
     elif model_provider == "mistral":
-        return ChatMistralAI(api_key=api_key, model="mistral-large-latest", temperature=0.7)
+        return ChatMistralAI(model="mistral-large-latest", temperature=0.7)
     elif model_provider == "gemini":
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
-    return ChatOpenAI(api_key=os.getenv("OPENAI_API_KEY"), temperature=0.7, model="gpt-4o")
+    return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# --- ¡NUEVO! Plantilla de Prompt Corregida ---
-# Esta es la estructura correcta que espera la función del agente
+# --- Plantilla de Prompt y Creación de Agentes (CORREGIDO) ---
+# Esta es la estructura correcta que la función del agente espera
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system",
          "Eres ADNIA, una IA experta en derecho español y europeo. Tu especialidad es: {jurisdiccion}.\n"
          "Responde a las consultas del usuario de manera precisa y directa. Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar."),
-        MessagesPlaceholder(variable_name="chat_history"),
+        MessagesPlaceholder(variable_name="chat_history", optional=True),
         ("user", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad"),
     ]
 )
 
-# --- ¡NUEVO! Creación de Agentes Corregida ---
 def get_agent_executor(jurisdiction: str, model_provider: str):
+    """Crea un agente y su ejecutor para una jurisdicción y LLM específicos."""
     llm = get_llm(model_provider)
-    # Pasamos solo la jurisdicción. El agente se encargará del resto de variables.
-    agent_prompt = prompt.partial(jurisdiccion=jurisdiction)
-    agent = create_structured_chat_agent(llm, tools, agent_prompt)
-    return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+    # Creamos el agente pasándole las herramientas y el prompt.
+    # El agente sabrá cómo usar las variables 'input', 'chat_history' y 'agent_scratchpad'.
+    agent = create_structured_chat_agent(llm, tools, prompt)
+    # Devolvemos el ejecutor, que es lo que realmente corre el agente.
+    return AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        # La jurisdicción se pasa aquí, en el momento de la ejecución.
+        agent_kwargs={"jurisdiccion": jurisdiction},
+        handle_parsing_errors=True
+    )
 
-# --- Función Principal de Chat (sin cambios) ---
+# --- Función Principal de Chat ---
 def run_agent_chat_and_humanize(message: str, chat_history: list, jurisdiction: str, model_provider: str, humanize: bool):
     agent_executor = get_agent_executor(jurisdiction, model_provider)
     agent_input = {"input": message, "chat_history": chat_history}
