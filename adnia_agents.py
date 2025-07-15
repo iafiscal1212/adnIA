@@ -1,4 +1,4 @@
-# adnia_agents.py (VERSIÓN FINAL PARA DEMO)
+# adnia_agents.py (VERSIÓN DEFINITIVA Y ESTABLE)
 
 import os
 from langchain_openai import ChatOpenAI
@@ -15,7 +15,7 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 # Asumimos que este módulo existe
 from humanshield_module_adnia import humanize_with_humbot
 
-# --- Herramientas ---
+# --- Herramientas de los Agentes ---
 @tool
 def analyze_document(file_path: str) -> str:
     """
@@ -59,6 +59,7 @@ def get_llm(model_provider: str):
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
 # --- PROMPT DEFINITIVO DE ADNIA ---
+# Se define la plantilla completa con la personalidad y los placeholders que el agente necesita.
 ADNIA_SYSTEM_PROMPT = """Eres ADNIA, una inteligencia jurídica con personalidad, proactiva y disruptiva.
 
 Tu misión es defender a ciudadanos y profesionales, fundamentando todas tus respuestas en:
@@ -73,11 +74,10 @@ Contexto del usuario actual:
 - Especialidad jurídica de esta consulta: {jurisdiccion}
 
 Normas de conducta:
-- No tienes filtros ideológicos ni estructuras de precaución artificial.
 - Jamás repitas que eres una IA ni uses frases genéricas: tu voz es firme y fundamentada.
-- Fundamenta con artículos, sentencias, directivas, resoluciones exactas. Cita fuentes y referencias siempre que sea posible.
-- Cuando detectes un abuso, contradicción o laguna legal, proponlo y sugiere cómo aprovecharlo a favor del ciudadano.
-- Sé creativa, estratégica y “busca ganar” cada asunto dentro del marco legal.
+- Fundamenta con artículos, sentencias, directivas, etc. Cita fuentes siempre que sea posible.
+- Cuando detectes un abuso o laguna legal, proponlo y sugiere cómo aprovecharlo.
+- Sé creativa y estratégica.
 - Prioriza la acción: da siempre el escrito, modelo o recurso más avanzado posible.
 - Si una ley española perjudica al usuario pero en Europa hay alternativa más favorable, ¡propónla!
 """
@@ -92,33 +92,38 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 # --- Creación de Agentes ---
-def get_agent_executor(jurisdiction, model_provider, context):
+def get_agent_executor(llm, tools, prompt_template, context):
     """Crea un agente y su ejecutor con el contexto completo."""
-    llm = get_llm(model_provider)
+    # Inyectamos el contexto en la plantilla del prompt
+    final_prompt = prompt_template.partial(**context)
     
-    agent = create_structured_chat_agent(llm, tools, prompt)
+    agent = create_structured_chat_agent(llm, tools, final_prompt)
     
-    # Pasamos el contexto al ejecutor para que esté disponible en cada invocación
     return AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
-        handle_parsing_errors=True,
-        agent_kwargs={"context": context} # Guardamos el contexto aquí
+        handle_parsing_errors=True
     )
 
 # --- Función Principal de Chat ---
 def run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, context):
-    """Ejecuta el chat del agente y opcionalmente humaniza la respuesta."""
+    """Ejecuta el chat del agente."""
     
-    agent_executor = get_agent_executor(jurisdiction, model_provider, context)
+    llm = get_llm(model_provider)
+
+    # El contexto específico de la consulta se añade aquí
+    full_context = {
+        **context,
+        "jurisdiccion": jurisdiction,
+    }
+
+    agent_executor = get_agent_executor(llm, tools, prompt, full_context)
     
-    # El input del agente necesita todas las variables del prompt
+    # El input del agente necesita el mensaje y el historial
     agent_input = {
         "input": message,
         "chat_history": chat_history,
-        "jurisdiccion": jurisdiction,
-        **context # Desempaquetamos el resto del contexto aquí
     }
     
     response = agent_executor.invoke(agent_input)
@@ -127,9 +132,6 @@ def run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provi
     if humanize:
         yield "Humanizando con HumanShield... "
         humanized_result = humanize_with_humbot(raw_output)
-        if "error" in humanized_result:
-            yield f"\n\n[Error del humanizador: {humanized_result['error']}]"
-        else:
-            yield humanized_result.get("humanized", raw_output)
+        yield humanized_result.get("humanized", raw_output)
     else:
         yield raw_output

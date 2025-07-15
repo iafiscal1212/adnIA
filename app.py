@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 
 from adnia_agents import run_agent_chat_and_humanize
+# Asumimos que blockchain_adnia.py existe
 from blockchain_adnia import guardar_en_blockchain
 
 load_dotenv()
@@ -16,6 +17,7 @@ UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
+# Servimos desde 'static' para que encuentre chat.html, etc.
 app = Flask(__name__, static_folder='static', template_folder='static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -50,9 +52,7 @@ def handle_chat():
         user_context = {
             "usuario": "Abogado (Cliente Demo)",
             "rol": "profesional",
-            "pais": "España",
-            "memoriaLarga": "(sin memoria estratégica activa)",
-            "favoritos": "(sin favoritos guardados)"
+            "pais": "España"
         }
 
         def generate_response():
@@ -62,8 +62,9 @@ def handle_chat():
         return Response(stream_with_context(generate_response()), mimetype='text/plain; charset=utf-8')
 
     except Exception as e:
-        print(traceback.format_exc())
-        return Response(f"Error interno del servidor: {str(e)}", status=500)
+        error_message = traceback.format_exc()
+        print(error_message)
+        return Response(f"Error interno del servidor: {e}", status=500)
 
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
