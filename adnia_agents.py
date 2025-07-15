@@ -1,12 +1,11 @@
-# adnia_agents.py (Versión Corregida y Definitiva)
+# adnia_agents.py (Versión Simplificada y Corregida)
 
 import os
 from langchain_openai import ChatOpenAI
 from langchain_mistralai.chat_models import ChatMistralAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain import hub # <-- Importamos hub
-from langchain.tools import tool
+from langchain import hub
 from langchain_core.prompts import MessagesPlaceholder
 
 # Librerías para procesamiento local
@@ -43,7 +42,7 @@ def analyze_document(file_path: str) -> str:
         return f"Error al procesar el archivo: {e}"
 
 # Instancia base de Tavily
-_tavily_search_base = TavilySearchResults(max_results=5) 
+_tavily_search_base = TavilySearchResults(max_results=3) 
 
 @tool
 def buscar_en_boe(query: str) -> str:
@@ -62,32 +61,28 @@ def get_llm(model_provider: str):
     elif model_provider == "mistral":
         return ChatMistralAI(model="mistral-large-latest", temperature=0.7)
     elif model_provider == "gemini":
-        # La librería de Google busca por defecto la variable de entorno 'GOOGLE_API_KEY'
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
 # --- Creación de Agentes ---
-# Usamos hub.pull para obtener un prompt fiable y probado para este tipo de agente.
-# Esto evita los errores de variables faltantes.
-prompt_template = hub.pull("hwchase17/structured-chat-agent")
+# Usamos hub.pull para obtener un prompt fiable y probado.
+prompt = hub.pull("hwchase17/structured-chat-agent")
 
 def get_agent_executor(jurisdiction: str, model_provider: str):
     """Crea un agente y su ejecutor para una jurisdicción y LLM específicos."""
     llm = get_llm(model_provider)
     
-    # Adaptamos el prompt descargado para añadir nuestra especialización (jurisdicción)
-    # sin romper su estructura original.
-    prompt = prompt_template.partial(jurisdiccion=jurisdiction)
-
-    agent = create_structured_chat_agent(llm, tools, prompt)
+    # Adaptamos el prompt para incluir la jurisdicción
+    final_prompt = prompt.partial(jurisdiccion=jurisdiction)
     
+    agent = create_structured_chat_agent(llm, tools, final_prompt)
+    
+    # ELIMINAMOS la memoria para evitar el error de importación
     return AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
-        handle_parsing_errors=True,
-        # Añadimos un historial de conversación simple
-        memory=ConversationBufferWindow(k=3, memory_key="chat_history", return_messages=True)
+        handle_parsing_errors=True
     )
 
 # --- Función Principal de Chat ---
@@ -97,7 +92,7 @@ def run_agent_chat_and_humanize(message: str, chat_history: list, jurisdiction: 
     
     agent_input = {
         "input": message,
-        # La jurisdicción se pasa al prompt a través del método .partial() más arriba
+        "chat_history": chat_history # Pasamos el historial, aunque el agente no tenga memoria interna lo usará en el prompt
     }
     
     response = agent_executor.invoke(agent_input)
