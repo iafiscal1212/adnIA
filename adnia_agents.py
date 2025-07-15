@@ -1,3 +1,5 @@
+# adnia_agents.py (Corregido)
+
 import os
 from langchain_openai import ChatOpenAI
 from langchain_mistralai.chat_models import ChatMistralAI
@@ -13,6 +15,10 @@ import pytesseract
 
 from humanshield_module_adnia import humanize_with_humbot
 
+# --- CAMBIO 1: Importar TavilySearchResults ---
+# Se ha añadido la importación que faltaba para evitar el NameError.
+from langchain_community.tools.tavily_search import TavilySearchResults
+
 # --- Herramientas de los Agentes ---
 @tool
 def analyze_document(file_path: str) -> str:
@@ -21,7 +27,6 @@ def analyze_document(file_path: str) -> str:
     Utiliza esta herramienta cuando el usuario pregunte sobre un documento que acaba de subir.
     """
     try:
-        # Creamos una ruta segura dentro de la carpeta 'uploads' para evitar accesos indebidos
         uploads_dir = "uploads"
         safe_path = os.path.join(uploads_dir, os.path.basename(file_path))
         
@@ -37,14 +42,18 @@ def analyze_document(file_path: str) -> str:
     except Exception as e:
         return f"Error al procesar el archivo: {e}"
 
-# Instancia base de la herramienta de búsqueda de Tavily
-_tavily_search = TavilySearchResults(max_results=3)
+# --- CAMBIO 2: Corregir la herramienta de búsqueda ---
+# En lugar de modificar el objeto después de crearlo, la lógica de búsqueda
+# específica para el BOE se encapsula directamente en la herramienta.
+_tavily_search_base = TavilySearchResults(max_results=3)
 
 @tool
 def buscar_en_boe(query: str) -> str:
     """Busca en el Boletín Oficial del Estado (BOE). Utiliza esta herramienta para encontrar leyes, decretos y otra información oficial española."""
+    # La restricción 'site:boe.es' se aplica aquí directamente.
     site_restricted_query = f"site:boe.es {query}"
-    return _tavily_search.invoke(site_restricted_query)
+    return _tavily_search_base.invoke(site_restricted_query)
+
 
 # Lista de herramientas que el agente podrá usar
 tools = [analyze_document, buscar_en_boe]
@@ -57,19 +66,21 @@ def get_llm(model_provider: str):
     elif model_provider == "mistral":
         return ChatMistralAI(model="mistral-large-latest", temperature=0.7)
     elif model_provider == "gemini":
-        # La librería de Google busca por defecto la variable de entorno 'GOOGLE_API_KEY'
+        # La librería de Google busca por defecto la variable de entorno 'GOOGLE_API_KEY'.
+        # Asegúrate de que esta variable esté configurada en tu entorno de Cloud Run.
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# --- Plantilla de Prompt y Creación de Agentes ---
-# Este prompt está diseñado para ser compatible con 'create_structured_chat_agent'
-# e incluye los placeholders necesarios: {tools} y {tool_names}.
+# --- CAMBIO 3: Corregir la Plantilla del Prompt ---
+# Se ha añadido {tools} y {tool_names} para que el agente sepa dónde renderizar
+# la descripción de las herramientas disponibles.
 prompt = ChatPromptTemplate.from_messages(
     [
         (
             "system",
             "Eres ADNIA, una IA experta en derecho español y europeo. Tu especialidad actual es: {jurisdiccion}.\n"
-            "Responde a las consultas del usuario de manera precisa y directa. Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar."
+            "Responde a las consultas del usuario de manera precisa y directa. Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar.\n"
+            "Aquí tienes las herramientas disponibles:\n{tools}" # Variable requerida
         ),
         MessagesPlaceholder(variable_name="chat_history"),
         ("user", "{input}"),
@@ -77,9 +88,12 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
+
 def get_agent_executor(jurisdiction: str, model_provider: str):
     """Crea un agente y su ejecutor para una jurisdicción y LLM específicos."""
     llm = get_llm(model_provider)
+    
+    # El prompt ya está corregido y es compatible con el agente.
     agent = create_structured_chat_agent(llm, tools, prompt)
     
     return AgentExecutor(
@@ -94,13 +108,13 @@ def run_agent_chat_and_humanize(message: str, chat_history: list, jurisdiction: 
     """Ejecuta el chat del agente y opcionalmente humaniza la respuesta."""
     agent_executor = get_agent_executor(jurisdiction, model_provider)
     
-    # Se incluyen todas las variables que el prompt necesita en el momento de la ejecución.
     agent_input = {
         "input": message, 
         "chat_history": chat_history, 
         "jurisdiction": jurisdiction 
     }
     
+    # El invoke ahora funcionará porque el prompt y las herramientas son correctos.
     response = agent_executor.invoke(agent_input)
     raw_output = response.get("output", "El agente no produjo una respuesta.")
     

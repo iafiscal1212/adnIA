@@ -16,6 +16,7 @@ langchain-community==0.0.38
 langchain-openai==0.1.6
 langchain-mistralai==0.1.6
 langchain-google-genai==1.0.4
+langchainhub
 
 # Herramientas de Agentes
 tavily-python==0.3.3
