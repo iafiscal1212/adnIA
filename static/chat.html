@@ -7,8 +7,10 @@
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #1a1a1a; color: #e0e0e0; margin: 0; display: flex; flex-direction: column; height: 100vh; }
         #header { padding: 10px 20px; background-color: #222; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #00ff00;}
-        #chat-title { color: #00ff00; margin: 0;}
-        .controls { display: flex; align-items: center; gap: 20px; }
+        #chat-title { color: #00ff00; margin: 0; font-size: 1.2rem;}
+        .controls { display: flex; align-items: center; gap: 15px; }
+        .btn-header { background: transparent; border: 1px solid #00ff00; color: #00ff00; padding: 5px 10px; border-radius: 5px; cursor: pointer; transition: all 0.3s; }
+        .btn-header:hover { background: #00ff00; color: #000; }
         #model-selector { background-color: #333; color: white; border: 1px solid #00ff00; padding: 5px 10px; border-radius: 5px; }
         .switch-container { display: flex; align-items: center; gap: 8px; font-size: 0.9em; color: #00ff00;}
         .switch { position: relative; display: inline-block; width: 40px; height: 20px; }
@@ -21,6 +23,7 @@
         .message { max-width: 80%; margin-bottom: 15px; padding: 10px 15px; border-radius: 18px; line-height: 1.5; white-space: pre-wrap; }
         .user-message { background-color: #005500; color: white; margin-left: auto; border-bottom-right-radius: 4px; }
         .ai-message { background-color: #333; color: #e0e0e0; margin-right: auto; border-bottom-left-radius: 4px; }
+        .system-notification { background-color: #3e3e00; color: #ffffaa; margin: 10px auto; padding: 8px 12px; border: 1px solid #ffffaa; border-radius: 8px; font-size: 0.9em; }
         #input-area { display: flex; padding: 10px; border-top: 1px solid #00ff00; }
         #chat-input { flex-grow: 1; background-color: #333; color: white; border: 1px solid #555; border-radius: 20px; padding: 10px 15px; font-size: 1rem; }
         #send-button { background-color: #00ff00; color: #000; border: none; border-radius: 50%; width: 45px; height: 45px; margin-left: 10px; cursor: pointer; font-size: 1.5rem; }
@@ -30,8 +33,11 @@
     <div id="header">
         <h1 id="chat-title">Consultando...</h1>
         <div class="controls">
+             <button class="btn-header" id="upload-btn">Subir Archivo</button>
+            <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" style="display: none;">
+            <a href="/" class="btn-header" style="text-decoration: none;">Volver al Inicio</a>
             <div class="switch-container">
-                <span>Modo HumanShield</span>
+                <span>HumanShield</span>
                 <label class="switch">
                     <input type="checkbox" id="humanize-toggle" checked>
                     <span class="slider"></span>
@@ -57,6 +63,8 @@
         const chatTitle = document.getElementById('chat-title');
         const modelSelector = document.getElementById('model-selector');
         const humanizeToggle = document.getElementById('humanize-toggle');
+        const uploadButton = document.getElementById('upload-btn');
+        const fileInput = document.getElementById('file-input');
 
         const params = new URLSearchParams(window.location.search);
         const jurisdiction = params.get('jurisdiccion') || 'general';
@@ -66,9 +74,12 @@
             chatTitle.innerText = `Chat de ${formattedTitle}`;
         }
 
-        function addMessage(text, sender) {
+        function addMessage(text, type) {
             const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}-message`;
+            messageDiv.className = `message ${type}-message`;
+            if (type === 'system-notification') {
+                messageDiv.className = 'system-notification';
+            }
             messageDiv.innerText = text;
             chatContainer.appendChild(messageDiv);
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -84,7 +95,7 @@
             
             const selectedModel = modelSelector.value;
             const shouldHumanize = humanizeToggle.checked;
-            const aiResponseDiv = addMessage("", 'ai');
+            const aiResponseDiv = addMessage("Procesando...", 'ai');
 
             try {
                 const response = await fetch('/api/chat', {
@@ -102,6 +113,7 @@
                 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
+                aiResponseDiv.innerText = ""; // Limpiar el "Procesando..."
                 
                 while (true) {
                     const { value, done } = await reader.read();
@@ -110,11 +122,40 @@
                     aiResponseDiv.innerText += chunk;
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                 }
-
             } catch (error) {
                 aiResponseDiv.innerText = `Error de conexión: ${error.message}`;
             }
         }
+        
+        // --- LÓGICA PARA SUBIR ARCHIVOS ---
+        uploadButton.addEventListener('click', () => fileInput.click());
+
+        fileInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            addMessage(`Subiendo ${file.name}...`, 'system-notification');
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    addMessage(`Archivo "${file.name}" analizado. Ya puedes hacer preguntas sobre él. La ruta es: ${result.filepath}`, 'system-notification');
+                } else {
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                addMessage(`Error al subir el archivo: ${error.message}`, 'system-notification');
+            }
+            fileInput.value = ''; // Resetear para poder subir el mismo archivo otra vez
+        });
+
 
         sendButton.addEventListener('click', sendMessage);
         chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(); });
