@@ -1,3 +1,5 @@
+# adnia_agents.py
+
 import os
 import json
 from langchain_openai import ChatOpenAI
@@ -34,10 +36,22 @@ def analyze_document(file_path: str) -> str:
     except Exception as e:
         return f"Error al procesar el archivo: {e}"
 
-buscar_en_boe = TavilySearchResults(max_results=3, name="buscar_en_boe", description="Busca en el Boletín Oficial del Estado (BOE).")
-buscar_en_boe.search_kwargs = {"query_prefix": "site:boe.es"}
+# **INICIO DE LA CORRECCIÓN**
+# 1. Creamos una instancia base de la herramienta de búsqueda.
+_tavily_search = TavilySearchResults(max_results=3)
 
+# 2. Creamos una nueva herramienta personalizada que añade el prefijo para buscar solo en el BOE.
+@tool
+def buscar_en_boe(query: str) -> str:
+    """Busca en el Boletín Oficial del Estado (BOE). Utiliza esta herramienta para encontrar leyes, decretos y otra información oficial."""
+    # Añadimos el prefijo a la consulta del usuario antes de ejecutar la búsqueda
+    site_restricted_query = f"site:boe.es {query}"
+    return _tavily_search.invoke(site_restricted_query)
+
+# 3. Usamos las herramientas corregidas.
 tools = [analyze_document, buscar_en_boe]
+# **FIN DE LA CORRECCIÓN**
+
 
 # --- Fábrica de LLMs ---
 def get_llm(model_provider: str):
