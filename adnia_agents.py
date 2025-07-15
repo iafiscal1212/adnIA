@@ -3,14 +3,14 @@ from langchain_openai import ChatOpenAI
 from langchain_mistralai.chat_models import ChatMistralAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.agents import AgentExecutor, create_structured_chat_agent
-from langchain_core.prompts import ChatPromptTemplate
-from langchain import hub # Importamos hub para cargar prompts probados
-
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
-from langchain_community.tools.tavily_search import TavilySearchResults
+
+# Librerías para procesamiento local
 from langchain_community.document_loaders import PyPDFLoader
 from PIL import Image
 import pytesseract
+
 from humanshield_module_adnia import humanize_with_humbot
 
 # --- Herramientas de los Agentes ---
@@ -20,10 +20,9 @@ def analyze_document(file_path: str) -> str:
     Analiza el contenido de un archivo (PDF o imagen) localmente y devuelve el texto extraído.
     Utiliza esta herramienta cuando el usuario pregunte sobre un documento que acaba de subir.
     """
-    # El código de esta herramienta no necesita cambios
     try:
+        # Creamos una ruta segura dentro de la carpeta 'uploads' para evitar accesos indebidos
         uploads_dir = "uploads"
-        # Creamos una ruta segura para evitar que se acceda a otros directorios
         safe_path = os.path.join(uploads_dir, os.path.basename(file_path))
         
         if not os.path.exists(safe_path):
@@ -38,18 +37,19 @@ def analyze_document(file_path: str) -> str:
     except Exception as e:
         return f"Error al procesar el archivo: {e}"
 
-# CORRECCIÓN 1: Envolvemos Tavily en una función @tool
+# Instancia base de la herramienta de búsqueda de Tavily
 _tavily_search = TavilySearchResults(max_results=3)
 
 @tool
 def buscar_en_boe(query: str) -> str:
-    """Busca en el Boletín Oficial del Estado (BOE). Utiliza esta herramienta para encontrar leyes, decretos, y otra información oficial española."""
+    """Busca en el Boletín Oficial del Estado (BOE). Utiliza esta herramienta para encontrar leyes, decretos y otra información oficial española."""
     site_restricted_query = f"site:boe.es {query}"
     return _tavily_search.invoke(site_restricted_query)
 
+# Lista de herramientas que el agente podrá usar
 tools = [analyze_document, buscar_en_boe]
 
-# --- Fábrica de LLMs (CORRECCIÓN 2) ---
+# --- Fábrica de LLMs ---
 def get_llm(model_provider: str):
     """Obtiene el modelo de lenguaje (LLM) asegurándose de usar la API Key correcta."""
     if model_provider == "openai":
@@ -57,27 +57,28 @@ def get_llm(model_provider: str):
     elif model_provider == "mistral":
         return ChatMistralAI(model="mistral-large-latest", temperature=0.7)
     elif model_provider == "gemini":
-        # La librería busca la variable de entorno 'GOOGLE_API_KEY'
+        # La librería de Google busca por defecto la variable de entorno 'GOOGLE_API_KEY'
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# --- Creación de Agente (CORRECCIÓN 3) ---
+# --- Plantilla de Prompt y Creación de Agentes ---
+# Este prompt está diseñado para ser compatible con 'create_structured_chat_agent'
+# e incluye los placeholders necesarios: {tools} y {tool_names}.
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Eres ADNIA, una IA experta en derecho español y europeo. Tu especialidad actual es: {jurisdiccion}.\n"
+            "Responde a las consultas del usuario de manera precisa y directa. Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar."
+        ),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ]
+)
+
 def get_agent_executor(jurisdiction: str, model_provider: str):
     """Crea un agente y su ejecutor para una jurisdicción y LLM específicos."""
-    
-    # Usamos un prompt estándar de LangChain que ya está preparado para agentes
-    # Esto soluciona el error de "missing required variables"
-    prompt = hub.pull("hwchase17/structured-chat-agent")
-
-    # Reemplazamos el mensaje de sistema del prompt estándar por el nuestro
-    prompt.messages[0].prompt.template = (
-        "Eres ADNIA, una IA experta en derecho español y europeo. "
-        f"Tu especialidad actual es: {jurisdiction}.\n"
-        "Responde a las consultas del usuario de manera precisa y directa. "
-        "Antes de responder, utiliza las herramientas de búsqueda si la pregunta requiere información legal específica, "
-        "novedosa o sobre legislación vigente. Basa tus respuestas en los resultados de la búsqueda para ser preciso y no alucinar."
-    )
-
     llm = get_llm(model_provider)
     agent = create_structured_chat_agent(llm, tools, prompt)
     
@@ -90,9 +91,15 @@ def get_agent_executor(jurisdiction: str, model_provider: str):
 
 # --- Función Principal de Chat ---
 def run_agent_chat_and_humanize(message: str, chat_history: list, jurisdiction: str, model_provider: str, humanize: bool):
-    # Esta función no necesita cambios
+    """Ejecuta el chat del agente y opcionalmente humaniza la respuesta."""
     agent_executor = get_agent_executor(jurisdiction, model_provider)
-    agent_input = {"input": message, "chat_history": chat_history}
+    
+    # Se incluyen todas las variables que el prompt necesita en el momento de la ejecución.
+    agent_input = {
+        "input": message, 
+        "chat_history": chat_history, 
+        "jurisdiction": jurisdiction 
+    }
     
     response = agent_executor.invoke(agent_input)
     raw_output = response.get("output", "El agente no produjo una respuesta.")
