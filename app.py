@@ -1,4 +1,4 @@
-# app.py (Versión Final para la Demo)
+# app.py (VERSIÓN FINAL PARA DEMO)
 
 import os
 import traceback
@@ -12,7 +12,6 @@ from blockchain_adnia import guardar_en_blockchain
 
 load_dotenv()
 
-# --- CONFIGURACIÓN ---
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -23,7 +22,6 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-# --- RUTAS ---
 @app.route("/")
 def home():
     return app.send_static_file("index.html")
@@ -32,7 +30,6 @@ def home():
 def chat_page():
     return app.send_static_file("chat.html")
 
-# --- API ENDPOINTS ---
 @app.route("/api/chat", methods=["POST"])
 def handle_chat():
     try:
@@ -49,19 +46,16 @@ def handle_chat():
         
         chat_history = data.get("chat_history", [])
 
-        # --- CONTEXTO PARA LA PERSONALIDAD DE ADNIA ---
-        # Para la demo, usamos valores fijos. En el futuro, esto vendría
-        # de una base de datos de usuarios.
+        # CONTEXTO FIJO PARA LA DEMO
         user_context = {
-            "usuario": "Abogado Cliente (Demo)",
+            "usuario": "Abogado (Cliente Demo)",
             "rol": "profesional",
             "pais": "España",
-            "memoriaLarga": "(sin memoria estratégica activa para esta demo)",
-            "favoritos": "(sin favoritos guardados para esta demo)"
+            "memoriaLarga": "(sin memoria estratégica activa)",
+            "favoritos": "(sin favoritos guardados)"
         }
 
         def generate_response():
-            # Pasamos el contexto del usuario a la función del agente
             for chunk in run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, user_context):
                 yield chunk
 
@@ -82,9 +76,7 @@ def upload_file():
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
         guardar_en_blockchain(f"Documento analizado: {filename}")
-        
         return jsonify({"message": "Archivo subido correctamente.", "filepath": filepath})
     else:
         return jsonify({"error": "Formato de archivo no permitido"}), 400

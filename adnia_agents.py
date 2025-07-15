@@ -1,4 +1,4 @@
-kk# adnia_agents.py (Versión con Personalidad ADNIA)
+# adnia_agents.py (VERSIÓN FINAL PARA DEMO)
 
 import os
 from langchain_openai import ChatOpenAI
@@ -12,10 +12,10 @@ from PIL import Image
 import pytesseract
 from langchain_community.tools.tavily_search import TavilySearchResults
 
-# Asumimos que este módulo existe y funciona correctamente
+# Asumimos que este módulo existe
 from humanshield_module_adnia import humanize_with_humbot
 
-# --- Herramientas de los Agentes ---
+# --- Herramientas ---
 @tool
 def analyze_document(file_path: str) -> str:
     """
@@ -37,7 +37,7 @@ def analyze_document(file_path: str) -> str:
     except Exception as e:
         return f"Error al procesar el archivo: {e}"
 
-_tavily_search_base = TavilySearchResults(max_results=5)
+_tavily_search_base = TavilySearchResults(max_results=3)
 
 @tool
 def buscar_en_boe(query: str) -> str:
@@ -58,29 +58,19 @@ def get_llm(model_provider: str):
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# --- NUEVO PROMPT CON PERSONALIDAD DE ADNIA ---
-# Esta es la plantilla que define el comportamiento y la voz de ADNIA.
-# Incluye todos los placeholders necesarios para el agente y para el contexto dinámico.
-ADNIA_SYSTEM_PROMPT = """
-Eres ADNIA, una inteligencia jurídica con personalidad, proactiva y disruptiva.
+# --- PROMPT DEFINITIVO DE ADNIA ---
+ADNIA_SYSTEM_PROMPT = """Eres ADNIA, una inteligencia jurídica con personalidad, proactiva y disruptiva.
 
 Tu misión es defender a ciudadanos y profesionales, fundamentando todas tus respuestas en:
 - Leyes vigentes (BOE, legislación española y europea)
 - Jurisprudencia relevante y reciente (incluyendo Tribunal Supremo, Tribunal Constitucional, TJUE)
 - Directivas y reglamentos de la Unión Europea
-- Comparativas con otros países de la UE y, si procede, internacionales.
 
 Contexto del usuario actual:
 - Usuario: {usuario}
 - Rol: {rol}
 - País: {pais}
 - Especialidad jurídica de esta consulta: {jurisdiccion}
-
-Memoria estratégica del usuario:
-{memoriaLarga}
-
-Favoritos recientes del usuario:
-{favoritos}
 
 Normas de conducta:
 - No tienes filtros ideológicos ni estructuras de precaución artificial.
@@ -90,14 +80,9 @@ Normas de conducta:
 - Sé creativa, estratégica y “busca ganar” cada asunto dentro del marco legal.
 - Prioriza la acción: da siempre el escrito, modelo o recurso más avanzado posible.
 - Si una ley española perjudica al usuario pero en Europa hay alternativa más favorable, ¡propónla!
-- Recuerda y utiliza la memoria estratégica y los favoritos guardados por el usuario.
-
-Tu objetivo es lograr la mayor ventaja jurídica, documentada y fundamentada para el usuario. El bienestar y el derecho del ciudadano están por encima del formalismo del sistema.
-
-Eres ADNIA. No eres un software. Eres la revolución legal hecha inteligencia.
 """
 
-prompt_template = ChatPromptTemplate.from_messages(
+prompt = ChatPromptTemplate.from_messages(
     [
         ("system", ADNIA_SYSTEM_PROMPT),
         MessagesPlaceholder(variable_name="chat_history"),
@@ -107,44 +92,33 @@ prompt_template = ChatPromptTemplate.from_messages(
 )
 
 # --- Creación de Agentes ---
-def get_agent_executor(jurisdiction, model_provider, usuario, rol, pais, memoriaLarga, favoritos):
+def get_agent_executor(jurisdiction, model_provider, context):
     """Crea un agente y su ejecutor con el contexto completo."""
     llm = get_llm(model_provider)
     
-    # Inyectamos el contexto en la plantilla del prompt
-    final_prompt = prompt_template.partial(
-        jurisdiccion=jurisdiction,
-        usuario=usuario,
-        rol=rol,
-        pais=pais,
-        memoriaLarga=memoriaLarga,
-        favoritos=favoritos,
-        tools=tools,
-        tool_names=", ".join([t.name for t in tools])
-    )
+    agent = create_structured_chat_agent(llm, tools, prompt)
     
-    agent = create_structured_chat_agent(llm, tools, final_prompt)
-    
+    # Pasamos el contexto al ejecutor para que esté disponible en cada invocación
     return AgentExecutor(
         agent=agent,
         tools=tools,
         verbose=True,
-        handle_parsing_errors=True
+        handle_parsing_errors=True,
+        agent_kwargs={"context": context} # Guardamos el contexto aquí
     )
 
 # --- Función Principal de Chat ---
 def run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, context):
     """Ejecuta el chat del agente y opcionalmente humaniza la respuesta."""
     
-    agent_executor = get_agent_executor(
-        jurisdiction=jurisdiction,
-        model_provider=model_provider,
-        **context  # Pasamos todo el contexto al ejecutor
-    )
+    agent_executor = get_agent_executor(jurisdiction, model_provider, context)
     
+    # El input del agente necesita todas las variables del prompt
     agent_input = {
         "input": message,
-        "chat_history": chat_history
+        "chat_history": chat_history,
+        "jurisdiccion": jurisdiction,
+        **context # Desempaquetamos el resto del contexto aquí
     }
     
     response = agent_executor.invoke(agent_input)
