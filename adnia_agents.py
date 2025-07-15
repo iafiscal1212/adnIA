@@ -1,4 +1,4 @@
-# adnia_agents.py (VERSIÓN DEFINITIVA Y ESTABLE)
+# adnia_agents.py (VERSIÓN DE EMERGENCIA PARA DEMO)
 
 import os
 from langchain_openai import ChatOpenAI
@@ -15,7 +15,6 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 # Asumimos que este módulo existe
 from humanshield_module_adnia import humanize_with_humbot
 
-# --- Herramientas de los Agentes ---
 @tool
 def analyze_document(file_path: str) -> str:
     """
@@ -47,7 +46,6 @@ def buscar_en_boe(query: str) -> str:
 
 tools = [analyze_document, buscar_en_boe]
 
-# --- Fábrica de LLMs ---
 def get_llm(model_provider: str):
     """Obtiene el modelo de lenguaje (LLM)."""
     if model_provider == "openai":
@@ -58,8 +56,6 @@ def get_llm(model_provider: str):
         return ChatGoogleGenerativeAI(model="gemini-1.5-pro-latest", temperature=0.7)
     return ChatOpenAI(temperature=0.7, model="gpt-4o")
 
-# --- PROMPT DEFINITIVO DE ADNIA ---
-# Se define la plantilla completa con la personalidad y los placeholders que el agente necesita.
 ADNIA_SYSTEM_PROMPT = """Eres ADNIA, una inteligencia jurídica con personalidad, proactiva y disruptiva.
 
 Tu misión es defender a ciudadanos y profesionales, fundamentando todas tus respuestas en:
@@ -79,7 +75,6 @@ Normas de conducta:
 - Cuando detectes un abuso o laguna legal, proponlo y sugiere cómo aprovecharlo.
 - Sé creativa y estratégica.
 - Prioriza la acción: da siempre el escrito, modelo o recurso más avanzado posible.
-- Si una ley española perjudica al usuario pero en Europa hay alternativa más favorable, ¡propónla!
 """
 
 prompt = ChatPromptTemplate.from_messages(
@@ -91,47 +86,30 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
-# --- Creación de Agentes ---
-def get_agent_executor(llm, tools, prompt_template, context):
+def get_agent_executor(llm, tools, context):
     """Crea un agente y su ejecutor con el contexto completo."""
-    # Inyectamos el contexto en la plantilla del prompt
-    final_prompt = prompt_template.partial(**context)
-    
+    final_prompt = prompt.partial(**context)
     agent = create_structured_chat_agent(llm, tools, final_prompt)
-    
-    return AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=True,
-        handle_parsing_errors=True
-    )
+    return AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
 
-# --- Función Principal de Chat ---
 def run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, context):
     """Ejecuta el chat del agente."""
-    
     llm = get_llm(model_provider)
-
-    # El contexto específico de la consulta se añade aquí
-    full_context = {
-        **context,
-        "jurisdiccion": jurisdiction,
-    }
-
-    agent_executor = get_agent_executor(llm, tools, prompt, full_context)
     
-    # El input del agente necesita el mensaje y el historial
-    agent_input = {
-        "input": message,
-        "chat_history": chat_history,
-    }
+    full_context = {**context, "jurisdiccion": jurisdiction}
+    agent_executor = get_agent_executor(llm, tools, full_context)
+    
+    agent_input = {"input": message, "chat_history": chat_history}
     
     response = agent_executor.invoke(agent_input)
     raw_output = response.get("output", "El agente no produjo una respuesta.")
     
+    # --- FIX DE EMERGENCIA ---
+    # La llamada a humanize_with_humbot está causando un timeout.
+    # Para la demo, devolvemos directamente la respuesta del agente
+    # aunque el botón de HumanShield esté activado.
     if humanize:
-        yield "Humanizando con HumanShield... "
-        humanized_result = humanize_with_humbot(raw_output)
-        yield humanized_result.get("humanized", raw_output)
+        yield "(Respuesta directa del agente. HumanShield activado pero la función está en optimización)\n\n"
+        yield raw_output
     else:
         yield raw_output
