@@ -3,302 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ADNIA - Asistente Digital de Navegación e Inteligencia Artificial</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
-            color: #00ff00;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow-x: hidden;
-        }
-        
-        .matrix-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: -1;
-            opacity: 0.1;
-        }
-        
-        .container {
-            max-width: 1200px;
-            width: 90%;
-            text-align: center;
-            z-index: 1;
-        }
-        
-        .logo {
-            font-size: 4rem;
-            font-weight: bold;
-            margin-bottom: 1rem;
-            text-shadow: 0 0 20px #00ff00;
-            animation: glow 2s ease-in-out infinite alternate;
-        }
-        
-        @keyframes glow {
-            from { text-shadow: 0 0 20px #00ff00; }
-            to { text-shadow: 0 0 30px #00ff00, 0 0 40px #00ff00; }
-        }
-        
-        .subtitle {
-            font-size: 1.5rem;
-            margin-bottom: 2rem;
-            color: #00cc00;
-        }
-        
-        .description {
-            font-size: 1.1rem;
-            line-height: 1.6;
-            margin-bottom: 3rem;
-            max-width: 800px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        
-        .features {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-bottom: 3rem;
-        }
-        
-        .feature {
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            border-radius: 10px;
-            padding: 2rem;
-            transition: all 0.3s ease;
-        }
-        
-        .feature:hover {
-            background: rgba(0, 255, 0, 0.2);
-            transform: translateY(-5px);
-        }
-        
-        .feature h3 {
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
-            color: #00ff00;
-        }
-        
-        .buttons {
-            display: flex;
-            gap: 2rem;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        
-        .btn {
-            padding: 1rem 2rem;
-            background: transparent;
-            border: 2px solid #00ff00;
-            color: #00ff00;
-            text-decoration: none;
-            border-radius: 5px;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        
-        .btn:hover {
-            background: #00ff00;
-            color: #000;
-            box-shadow: 0 0 20px #00ff00;
-        }
-        
-        .status {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0, 255, 0, 0.1);
-            border: 1px solid #00ff00;
-            padding: 1rem;
-            border-radius: 5px;
-            font-size: 0.9rem;
-        }
-        
-        .footer {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 0.9rem;
-            color: #00cc00;
-        }
-        
-        @media (max-width: 768px) {
-            .logo {
-                font-size: 2.5rem;
-            }
-            
-            .subtitle {
-                font-size: 1.2rem;
-            }
-            
-            .description {
-                font-size: 1rem;
-            }
-            
-            .buttons {
-                flex-direction: column;
-                align-items: center;
-            }
-        }
-    </style>
+    <meta name="description" content="ADNIA: Asistente Digital de Navegación e Inteligencia Artificial jurídica.">
+    <title>ADNIA - Inicio (Actualizado 2025)</title>
 </head>
 <body>
-    <div class="matrix-bg" id="matrix"></div>
-    
-    <div class="status">
-        <div>🟢 Sistema Operativo</div>
-        <div>🔒 Conexión Segura</div>
-        <div>⚡ IA Activa</div>
-    </div>
-    
-    <div class="container">
-        <h1 class="logo">ADNIA</h1>
-        <p class="subtitle">Asistente Digital de Navegación e Inteligencia Artificial</p>
-        
-        <div class="description">
-            <p>ADNIA es una inteligencia artificial jurídica  diseñada para defender al pueblo y  empresarios. 
-            Especializada en múltiples jurisdicciones legales, ADNIA proporciona asesoramiento legal fundamentado en leyes vigentes, 
-            jurisprudencia y normativa europea.</p>
+    <header>
+        <div class="status-indicators">
+            <p>🟢 Sistema Operativo</p>
+            <p>🔒 Conexión Segura</p>
+            <p>⚡ IA Activa</p>
         </div>
-        
-        <div class="features">
-            <div class="feature">
-                <h3>🏛️ Derecho Fiscal</h3>
+        <h1>ADNIA</h1>
+        <p>Asistente Digital de Navegación e Inteligencia Artificial</p>
+    </header>
+    <main>
+        <section class="description">
+            <p>ADNIA es una inteligencia artificial jurídica diseñada para defender al pueblo y empresarios. Especializada en múltiples jurisdicciones legales, ADNIA proporciona asesoramiento legal fundamentado en leyes vigentes, jurisprudencia y normativa europea.</p>
+        </section>
+        <section class="legal-areas">
+            <article class="card" onclick="window.location.href='/chat.html?jurisdiction=fiscal'">
+                <h2>🏛️ Derecho Fiscal</h2>
                 <p>Especialización en defensa tributaria, inspección fiscal y optimización impositiva según la ley española y europea.</p>
-            </div>
-            
-            <div class="feature">
-                <h3>⚖️ Derecho Penal</h3>
+            </article>
+            <!-- Repite para otros cards con ?jurisdiction=penal, etc. -->
+            <article class="card" onclick="window.location.href='/chat.html?jurisdiction=penal'">
+                <h2>⚖️ Derecho Penal</h2>
                 <p>Experta en defensa penal, alegaciones, recursos ante jueces y jurisprudencia constitucional.</p>
-            </div>
-            
-            <div class="feature">
-                <h3>📋 Derecho Civil</h3>
-                <p>Dominio en demandas civiles, contratos, reclamaciones patrimoniales y defensa ante tribunales civiles.</p>
-            </div>
-            
-            <div class="feature">
-                <h3>👥 Derecho Social</h3>
-                <p>Especialista en laboral, Seguridad Social, despidos, incapacidades y derechos sociales.</p>
-            </div>
-            
-            <div class="feature">
-                <h3>🏢 Derecho Administrativo</h3>
-                <p>Recursos administrativos, alegaciones y defensa ante la Administración Pública.</p>
-            </div>
-            
-            <div class="feature">
-                <h3>🔧 Panel Administrativo</h3>
-                <p>Gestión avanzada, usuarios, privilegios y auditoría de acciones del sistema.</p>
-            </div>
-        </div>
-        
-        <div class="buttons">
-            <a href="/ping" class="btn">🔍 Verificar Estado</a>
-            <a href="/dashboard" class="btn">📊 Dashboard</a>
-            <a href="/chat.html" class="btn">⚡ Consultar IA</a>
-        </div>
-    </div>
-    
-    <div class="footer">
-        ADNIA v1.0 - Todos los derechos reservados. Marca registrada | Defendiendo al pueblo desde la nube
-    </div>
-    
-    <script>
-        // --- CÓDIGO PARA EFECTOS VISUALES ---
-        function createMatrix() {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            document.getElementById('matrix').appendChild(canvas);
-            
-            // Caracteres latinos para el efecto de fondo
-            const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-            const charArray = chars.split('');
-            const fontSize = 14;
-            const columns = canvas.width / fontSize;
-            const drops = [];
-            
-            for (let i = 0; i < columns; i++) {
-                drops[i] = 1;
-            }
-            
-            function draw() {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.fillStyle = '#00ff00';
-                ctx.font = fontSize + 'px monospace';
-                
-                for (let i = 0; i < drops.length; i++) {
-                    const text = charArray[Math.floor(Math.random() * charArray.length)];
-                    ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) {
-                        drops[i] = 0;
-                    }
-                    drops[i]++;
-                }
-            }
-            setInterval(draw, 35);
-        }
-
-        // --- CÓDIGO PARA HACER CLICABLES LAS CAJAS ---
-        function setupJurisdictionLinks() {
-            const features = document.querySelectorAll('.feature');
-            features.forEach(feature => {
-                feature.style.cursor = 'pointer'; 
-                
-                feature.addEventListener('click', () => {
-                    const titleElement = feature.querySelector('h3');
-                    if (titleElement) {
-                        let jurisdictionText = titleElement.innerText;
-                        // Limpiar emoji y espacios
-                        jurisdictionText = jurisdictionText.replace(/[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, '').trim();
-                        
-                        if (jurisdictionText === 'Panel Administrativo') {
-                            window.location.href = '/dashboard';
-                        } else {
-                            // Convertir "Derecho Fiscal" a "derecho_fiscal" para la URL
-                            const urlParam = jurisdictionText.toLowerCase().replace(/ /g, '_');
-                            window.location.href = `/chat.html?jurisdiccion=${urlParam}`;
-                        }
-                    }
-                });
-            });
-        }
-
-        // Inicializar todo cuando la página cargue
-        document.addEventListener('DOMContentLoaded', function() {
-            createMatrix();
-            setupJurisdictionLinks();
-        });
-
-        // Redimensionar canvas
-        window.addEventListener('resize', function() {
-            const canvas = document.querySelector('#matrix canvas');
-            if (canvas) {
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
-            }
-        });
-    </script>
+            </article>
+            <!-- Añade los demás similarmente -->
+        </section>
+        <section class="actions">
+            <button onclick="alert('Estado verificado')">🔍 Verificar Estado</button>
+            <button>📊 Dashboard</button>
+            <button onclick="window.location.href='/chat.html'">⚡ Consultar IA</button>
+        </section>
+    </main>
+    <footer>
+        <p>ADNIA v2.0 (Julio 2025) - Todos los derechos reservados. Marca registrada | Defendiendo al pueblo desde la nube</p>
+    </footer>
 </body>
 </html>

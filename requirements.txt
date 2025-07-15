@@ -9,26 +9,26 @@ python-dotenv==1.0.1
 psycopg2-binary==2.9.9
 werkzeug==3.0.3
 
-# LangChain - "Golden" Stable Configuration
-langchain==0.1.20
-langchain-core==0.1.52
-langchain-community==0.0.38
-langchain-openai==0.1.6
-langchain-mistralai==0.1.6
-langchain-google-genai==1.0.4
+# LangChain - Versions latest al 15 julio 2025 (de PyPI)
+langchain==0.3.26  # Released Jun 20, 2025
+langchain-core==0.3.68  # Released Jul 3, 2025
+langchain-community==0.3.27  # Released Jul 2, 2025
+langchain-openai==0.3.28  # Released Jul 14, 2025
+langchain-mistralai==0.2.11
+langchain-google-genai==2.1.7  # Compatible con core 0.3.x
+langgraph==0.5.3
 langchainhub
 
 # Herramientas de Agentes
 tavily-python==0.3.3
 
-# Humanizador y otras utilidades
+# Humanizador y utilidades
 requests==2.32.3
 
 # Google Cloud
 google-cloud-storage==2.16.0
 
-# Herramientas para análisis de documentos (LOCAL)
-unstructured[local-inference]
+# Análisis de documentos básicos (sin heavy deps)
 pypdf
 pillow
 pytesseract

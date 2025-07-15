@@ -1,14 +1,13 @@
-# app.py (VERSIÓN FINAL PARA DEMO)
+# app.py (VERSIÓN MEJORADA - JULIO 2025)
 
 import os
 import traceback
-import json
-from flask import Flask, request, jsonify, Response, stream_with_context, render_template
+from flask import Flask, request, jsonify, Response, stream_with_context
 from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
+from functools import lru_cache  # NUEVO: Caching para performance
 
 from adnia_agents import run_agent_chat_and_humanize
-# Asumimos que blockchain_adnia.py existe
 from blockchain_adnia import guardar_en_blockchain
 
 load_dotenv()
@@ -17,7 +16,6 @@ UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Servimos desde 'static' para que encuentre chat.html, etc.
 app = Flask(__name__, static_folder='static', template_folder='static')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -32,6 +30,12 @@ def home():
 def chat_page():
     return app.send_static_file("chat.html")
 
+@lru_cache(maxsize=100)  # NUEVO: Cache para consultas repetidas
+def cached_chat(message, model_provider, jurisdiction, humanize, chat_history_tuple):
+    chat_history = list(chat_history_tuple)
+    user_context = {"usuario": "Abogado (Cliente Demo)", "rol": "profesional", "pais": "España"}
+    return list(run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, user_context))
+
 @app.route("/api/chat", methods=["POST"])
 def handle_chat():
     try:
@@ -40,23 +44,17 @@ def handle_chat():
         model_provider = data.get("model", "openai")
         jurisdiction = data.get("jurisdiction", "general")
         humanize = data.get("humanize", False)
-        
+        chat_history = data.get("chat_history", [])
+
         if not message:
             return Response("El mensaje no puede estar vacío.", status=400)
 
         guardar_en_blockchain(f"Consulta registrada: {message[:50]}...")
-        
-        chat_history = data.get("chat_history", [])
-
-        # CONTEXTO FIJO PARA LA DEMO
-        user_context = {
-            "usuario": "Abogado (Cliente Demo)",
-            "rol": "profesional",
-            "pais": "España"
-        }
 
         def generate_response():
-            for chunk in run_agent_chat_and_humanize(message, chat_history, jurisdiction, model_provider, humanize, user_context):
+            # Usa cache: Convierte history a tuple para cacheabilidad
+            history_tuple = tuple(chat_history)
+            for chunk in cached_chat(message, model_provider, jurisdiction, humanize, history_tuple):
                 yield chunk
 
         return Response(stream_with_context(generate_response()), mimetype='text/plain; charset=utf-8')
