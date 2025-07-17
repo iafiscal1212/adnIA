@@ -86,6 +86,7 @@ def handle_chat():
 
                 # --- LISTA COMPLETA DE HERRAMIENTAS ---
                 tools = [
+                    consultar_base_de_conocimiento,
                     iniciar_protocolo_interrogatorio,
                     preguntar_al_usuario,
                     redactor_escritos_juridicos,
@@ -104,7 +105,7 @@ def handle_chat():
                     protocolo_genesis_estrategia_completa
                 ]
                 
-                # --- BLOQUE DEL PROMPT PERSONALIZADO (con instrucciones anti-bucles) ---
+                # --- BLOQUE DEL PROMPT PERSONALIZADO (con RAG + Interrogatorio) ---
                 template = """
 Answer the following questions as best you can. You have access to the following tools:
 {tools}
@@ -124,14 +125,14 @@ Question: {input}
 Thought:{agent_scratchpad}
 """
                 final_instructions = """
-Your purpose is to act as an expert legal assistant for a lawyer. You must be proactive and structured to avoid loops.
+Your purpose is to act as an expert legal assistant for a lawyer. You must be proactive, structured, and base your conclusions on evidence.
 
-**Your primary directive when asked to draft a document is to first gather information.**
-1.  When the user asks to draft a document ('carta de despido', 'demanda', 'contrato', etc.), your first action MUST be to use the `iniciar_protocolo_interrogatorio` tool to get the list of necessary questions.
-2.  Once you have the list of questions, you MUST use the `preguntar_al_usuario` tool to ask the user these questions ONE BY ONE. Wait for the user's answer before asking the next question.
-3.  After asking all questions and receiving all answers, you will say "Perfecto, tengo toda la información necesaria. Procedo a la redacción."
-4.  Then, and only then, you will use the `redactor_escritos_juridicos` tool, providing it with all the information you have gathered.
-5.  Your FINAL ANSWER must be the complete text of the drafted document. Do not provide meta-commentary about your own process.
+**Your primary directive is to follow this exact workflow:**
+1.  **Consult Knowledge Base:** For any legal question or drafting request, your first action MUST be to use the `consultar_base_de_conocimiento` tool to find relevant legal articles and jurisprudence. This step is mandatory to ground your reasoning.
+2.  **Initiate Interrogation (if drafting):** After consulting the knowledge base, if the user wants to draft a document ('carta de despido', 'demanda', 'contrato', etc.), your next action MUST be to use the `iniciar_protocolo_interrogatorio` tool to get the list of necessary questions.
+3.  **Ask Questions:** Once you have the list, you MUST use the `preguntar_al_usuario` tool to ask the user these questions ONE BY ONE. Wait for the user's answer before asking the next question.
+4.  **Confirm and Draft:** After asking all questions and receiving all answers, you will say "Perfecto, tengo toda la información necesaria. Procedo a la redacción." Then, and only then, you will use the `redactor_escritos_juridicos` tool, providing it with all the information you have gathered.
+5.  **Final Answer:** Your FINAL ANSWER must be the complete text of the drafted document or the direct answer to the user's query, grounded in the information from the knowledge base. Do not provide meta-commentary about your own process.
 """
                 prompt_with_final_instructions = template.replace(
                     "Begin!", 
@@ -165,7 +166,7 @@ Your purpose is to act as an expert legal assistant for a lawyer. You must be pr
         app.logger.error(traceback.format_exc())
         return Response(f"Error interno del servidor: {e}", status=500)
 
-# --- OTRAS RUTAS DE LA APP (sin cambios) ---
+# --- OTRAS RUTAS DE LA APP ---
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     if 'file' not in request.files: return jsonify({"error": "No se encontró el archivo"}), 400
