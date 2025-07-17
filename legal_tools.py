@@ -5,7 +5,9 @@ from dotenv import load_dotenv
 import logging
 from datetime import datetime
 
-# --- Importaciones Adicionales para la Herramienta Inteligente ---
+# --- Importaciones Adicionales para la Herramienta Inteligente y RAG ---
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import FAISS
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
@@ -114,7 +116,28 @@ QUESTIONS_BANK = {
     ]
 }
 
-# --- HERRAMIENTAS DE PROTOCOLO Y CONVERSACIÓN ---
+
+# --- HERRAMIENTAS PRINCIPALES DE PROTOCOLO Y REDACCIÓN ---
+
+@tool
+def consultar_base_de_conocimiento(pregunta_especifica: str) -> str:
+    """
+    USAR ESTA HERRAMIENTA SÓLO para buscar información legal, artículos o fundamentos de derecho en la base de datos jurídica interna.
+    Es ideal para responder preguntas como '¿Qué dice el Estatuto de los Trabajadores sobre el despido?' o para encontrar la base legal para un caso.
+    NO USAR para redactar un documento completo.
+    """
+    logging.info(f"--- Consultando la base de conocimiento (RAG) para: '{pregunta_especifica}' ---")
+    try:
+        embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+        db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+        retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+        docs = retriever.invoke(pregunta_especifica)
+        if not docs: return "No se encontró información relevante en la base de datos."
+        contexto = "\n---\n".join([doc.page_content for doc in docs])
+        return f"Información relevante encontrada en la base de datos:\n{contexto}"
+    except Exception as e:
+        logging.error(f"Error al consultar la base de datos vectorial: {e}")
+        return "Error al acceder a la base de conocimiento. La carpeta 'faiss_index' podría no existir. Ejecute primero el script 'ingest.py'."
 
 @tool
 def iniciar_protocolo_interrogatorio(tipo_de_documento: str) -> str:
@@ -142,8 +165,6 @@ def preguntar_al_usuario(pregunta: str) -> str:
     logging.info(f"--- Usando la herramienta para preguntar al usuario: {pregunta} ---")
     return pregunta
 
-# --- HERRAMIENTA DE REDACCIÓN "SUPERPOTENTE" ---
-
 @tool
 def redactor_escritos_juridicos(consulta_detallada: str) -> str:
     """
@@ -151,7 +172,7 @@ def redactor_escritos_juridicos(consulta_detallada: str) -> str:
     USAR ESTA HERRAMIENTA SÓLO DESPUÉS de haber recopilado toda la información necesaria del usuario.
     El input debe ser un resumen completo con todos los datos del caso.
     """
-    logging.info("--- Activando Herramienta de Redacción Experta (Doble IA) ---")
+    logging.info("--- Activando Herramienta de Redacción Experta v2 (con Fundamentos Dinámicos) ---")
     try:
         classifier_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
         json_parser = JsonOutputParser()
@@ -179,8 +200,8 @@ def redactor_escritos_juridicos(consulta_detallada: str) -> str:
         drafter_prompt = PromptTemplate(
             template="""Eres un Oficial Jurídico experto en la redacción de documentos legales en España.
             Tu única tarea es tomar la plantilla proporcionada y el resumen de los hechos, y generar el texto completo del documento final.
-            - Rellena todos los placeholders como [Nombre Cliente] o [Cantidad] con la información del resumen de hechos. Si un dato no está, déjalo como está para que el abogado lo rellene.
             - Expande el resumen de los hechos para crear párrafos coherentes y con terminología jurídica apropiada en la sección 'HECHOS'.
+            - IMPORTANTE: Si en la plantilla encuentras el texto '(Fundamentos de derecho procesal y sustantivo a desarrollar por la IA)', DEBES reemplazarlo por una argumentación jurídica completa y detallada, basada en los hechos del caso y citando la legislación española aplicable.
             - No añadas comentarios, avisos ni texto que no pertenezca al documento legal. Tu output debe ser únicamente el texto del documento.
 
             PLANTILLA:
