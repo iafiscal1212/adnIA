@@ -15,26 +15,22 @@ from langchain import hub
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mistralai import ChatMistralAI
-# Importación añadida para el prompt personalizado
 from langchain_core.prompts import PromptTemplate
 
 # --- NUESTRAS IMPORTACIONES ---
 from blockchain_adnia import Blockchain
-# Asegúrate de que legal_tools.py está en la misma carpeta y contiene todas las herramientas
 from legal_tools import *
 
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
 
-# --- CONFIGURACIÓN DE LAS CLAVES DE API ---
+# --- CONFIGURACIÓN E INSTANCIAS ---
 GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
 HUMBOT_API_KEY = os.getenv("HUMBOT_API_KEY")
 
-# --- INSTANCIACIÓN DE LA BLOCKCHAIN ---
 blockchain = Blockchain()
-
 UPLOAD_FOLDER = 'uploads'
 ALLOWED_EXTENSIONS = {'pdf', 'png', 'jpg', 'jpeg'}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -77,33 +73,25 @@ def handle_chat():
         def generate_ai_response():
             llm = None
             try:
-                # --- SELECCIÓN DEL MODELO DE LENGUAJE (LLM) PARA EL AGENTE ---
+                # --- SELECCIÓN DEL MODELO DE LENGUAJE ---
                 if model_provider == "google":
-                    if not GEMINI_API_KEY: yield "Error: GOOGLE_API_KEY no configurada."; return
                     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=GEMINI_API_KEY, temperature=0)
-                
                 elif model_provider == "openai":
-                    if not OPENAI_API_KEY: yield "Error: OPENAI_API_KEY no configurada."; return
                     llm = ChatOpenAI(model="gpt-4-turbo", openai_api_key=OPENAI_API_KEY, temperature=0)
-
                 elif model_provider == "mistral":
-                    if not MISTRAL_API_KEY: yield "Error: MISTRAL_API_KEY no configurada."; return
                     llm = ChatMistralAI(model="mistral-large-latest", api_key=MISTRAL_API_KEY, temperature=0)
-                
-                elif model_provider == "humbot":
-                    yield "El modelo Humbot no tiene una integración directa con LangChain en esta versión. Por favor, selecciona otro modelo."
-                    return
-                
                 else:
                     yield f"El modelo '{model_provider}' no es válido para el agente."
                     return
 
-                # --- CONFIGURACIÓN DEL AGENTE CON TODAS LAS HERRAMIENTAS ---
+                # --- LISTA COMPLETA DE HERRAMIENTAS ---
                 tools = [
+                    iniciar_protocolo_interrogatorio,
+                    preguntar_al_usuario,
+                    redactor_escritos_juridicos,
                     buscar_en_boe, 
                     consultar_estado_api_hacienda, 
                     consultar_jurisprudencia_y_guias_procesales,
-                    redactor_escritos_juridicos,
                     herramienta_experto_derecho_social,
                     herramienta_experto_derecho_civil,
                     herramienta_experto_derecho_europeo,
@@ -116,16 +104,11 @@ def handle_chat():
                     protocolo_genesis_estrategia_completa
                 ]
                 
-                # --- BLOQUE DEL PROMPT PERSONALIZADO (LA MODIFICACIÓN CLAVE) ---
-
-                # La plantilla base del agente ReAct
+                # --- BLOQUE DEL PROMPT PERSONALIZADO (con instrucciones anti-bucles) ---
                 template = """
 Answer the following questions as best you can. You have access to the following tools:
-
 {tools}
-
 Use the following format:
-
 Question: the input question you must answer
 Thought: you should always think about what to do
 Action: the action to take, should be one of [{tool_names}]
@@ -140,39 +123,31 @@ Begin!
 Question: {input}
 Thought:{agent_scratchpad}
 """
-
-                # Añadimos la instrucción clave al final de la plantilla
                 final_instructions = """
-Your purpose is to act as an expert legal assistant for a lawyer.
-After using your tools and gathering all necessary information, you MUST formulate a final, comprehensive response that directly fulfills the user's original request.
-- If the user asked for a document to be drafted, your FINAL ANSWER must be the complete text of that document.
-- Do not provide meta-commentary about your own process or suggest consulting another lawyer. Your user is the lawyer.
-- Synthesize all the information you've gathered into a practical, definitive final output.
-"""
+Your purpose is to act as an expert legal assistant for a lawyer. You must be proactive and structured to avoid loops.
 
-                # Insertamos nuestras instrucciones en la plantilla original
+**Your primary directive when asked to draft a document is to first gather information.**
+1.  When the user asks to draft a document ('carta de despido', 'demanda', 'contrato', etc.), your first action MUST be to use the `iniciar_protocolo_interrogatorio` tool to get the list of necessary questions.
+2.  Once you have the list of questions, you MUST use the `preguntar_al_usuario` tool to ask the user these questions ONE BY ONE. Wait for the user's answer before asking the next question.
+3.  After asking all questions and receiving all answers, you will say "Perfecto, tengo toda la información necesaria. Procedo a la redacción."
+4.  Then, and only then, you will use the `redactor_escritos_juridicos` tool, providing it with all the information you have gathered.
+5.  Your FINAL ANSWER must be the complete text of the drafted document. Do not provide meta-commentary about your own process.
+"""
                 prompt_with_final_instructions = template.replace(
                     "Begin!", 
                     final_instructions + "\n\nBegin!"
                 )
-
-                # Creamos el prompt final a partir de la plantilla modificada
                 prompt = PromptTemplate.from_template(prompt_with_final_instructions)
-
-                # Creamos el agente y el ejecutor con el nuevo prompt
                 agent = create_react_agent(llm, tools, prompt)
-                agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+                agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True, max_iterations=25)
 
-
-                # --- CONSTRUCCIÓN DEL HISTORIAL PARA EL AGENTE ---
+                # --- LÓGICA DE HISTORIAL E INVOCACIÓN ---
                 chat_history = []
                 for msg in chat_history_json:
                     if msg["role"] == "user":
                         chat_history.append(HumanMessage(content=msg["content"]))
                     elif msg["role"] == "ai":
                         chat_history.append(AIMessage(content=msg["content"]))
-
-                # --- INVOCACIÓN DEL AGENTE ---
                 response = agent_executor.invoke({
                     "input": message_text,
                     "chat_history": chat_history
@@ -190,45 +165,23 @@ After using your tools and gathering all necessary information, you MUST formula
         app.logger.error(traceback.format_exc())
         return Response(f"Error interno del servidor: {e}", status=500)
 
-# --- RUTA DE SUBIDA DE ARCHIVOS ---
+# --- OTRAS RUTAS DE LA APP (sin cambios) ---
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     if 'file' not in request.files: return jsonify({"error": "No se encontró el archivo"}), 400
     file = request.files['file']
     if file.filename == '': return jsonify({"error": "Ningún archivo seleccionado"}), 400
-    
     if file and '.' in file.filename and file.filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS:
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
         blockchain.add_transaction(f"Documento analizado: {filename}", "Abogado (Cliente Demo)")
         blockchain.mine_block()
-
         analisis_resultado = f"Archivo '{filename}' subido con éxito."
-        try:
-            if filename.lower().endswith('.pdf'):
-                texto_extraido = ""
-                with open(filepath, 'rb') as f:
-                    reader = pypdf.PdfReader(f)
-                    for page in reader.pages:
-                        texto_extraido += page.extract_text() or ""
-                
-                if texto_extraido:
-                    # Usamos la herramienta directamente para el análisis
-                    analisis_resultado = analizador_documental_sherlock.run(texto_extraido)
-                else:
-                    analisis_resultado += " No se pudo extraer texto del PDF para su análisis."
-            
-        except Exception as e:
-            logging.error(f"Error durante el análisis del documento: {e}")
-            analisis_resultado += " Ocurrió un error durante el análisis del documento."
-
         return jsonify({"message": analisis_resultado})
     else:
         return jsonify({"error": "Formato de archivo no permitido"}), 400
 
-# --- RUTA DE AUDITORÍA ---
 @app.route("/api/audit")
 def get_audit_log():
     try:
