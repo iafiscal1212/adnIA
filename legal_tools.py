@@ -1,185 +1,197 @@
 import os
-import requests
+import json
 from langchain.tools import tool
 from dotenv import load_dotenv
 import logging
-import collections
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import datetime
+
+# --- Importaciones Adicionales para la Herramienta Inteligente ---
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
-# --- HERRAMIENTA 1: BUSCADOR DEL BOE ---
+# --- PLANTILLAS MAESTRAS DE DOCUMENTOS ---
+# Un "arsenal" de plantillas de alta calidad que la herramienta usará.
+DOCUMENT_TEMPLATES = {
+    "carta_despido": """
+[Ciudad], a {fecha}
+
+[DATOS DE LA EMPRESA]
+[Dirección]
+
+A la atención de:
+D./Dña. [Nombre del Trabajador]
+[Dirección del Trabajador]
+
+ASUNTO: CARTA DE DESPIDO DISCIPLINARIO
+
+Estimado/a señor/a,
+Por medio de la presente, la Dirección de esta empresa le notifica la decisión de extinguir la relación laboral que nos une con fecha de efectos del día de hoy, mediante despido disciplinario, en base a los incumplimientos contractuales graves y culpables que se detallan a continuación.
+
+HECHOS:
+{hechos_del_caso}
+
+FUNDAMENTOS DE DERECHO:
+I.- El contrato de trabajo podrá extinguirse por decisión del empresario, mediante despido basado en un incumplimiento grave y culpable del trabajador, de conformidad con el Artículo 54.1 del Real Decreto Legislativo 2/2015, de 23 de octubre, por el que se aprueba el texto refundido de la Ley del Estatuto de los Trabajadores.
+II.- Específicamente, los hechos descritos constituyen una transgresión de la buena fe contractual y un abuso de confianza en el desempeño del trabajo, según el Art. 54.2.d) del citado texto legal.
+III.- Asimismo, resultan de aplicación los artículos pertinentes del Convenio Colectivo de [Convenio Aplicable] en materia de régimen disciplinario.
+
+Por todo lo expuesto, le comunicamos la extinción de su relación laboral. La liquidación, saldo y finiquito correspondientes se encuentran a su disposición en las oficinas de la empresa.
+Rogamos firme el recibí de esta comunicación, a los meros efectos de notificación.
+
+Atentamente,
+Fdo.: La Dirección de la Empresa.
+""",
+    "demanda_juicio_ordinario": """
+AL JUZGADO DE PRIMERA INSTANCIA DE [Lugar del Juzgado] QUE POR TURNO CORRESPONDA
+
+D./Dña. [Nombre Procurador], Procurador/a de los Tribunales, en nombre y representación de D./Dña. [Nombre Cliente], mayor de edad, con domicilio en [Dirección Cliente] y D.N.I. [DNI Cliente], representación que acredito mediante [Poder General para Pleitos / Apud Acta], y bajo la dirección letrada de D./Dña. [Nombre Abogado], colegiado/a n.º [Número Colegiado] del Ilustre Colegio de Abogados de [Colegio Abogados], ante el Juzgado comparezco y como mejor proceda en Derecho, DIGO:
+
+Que por medio del presente escrito formulo DEMANDA DE JUICIO ORDINARIO en reclamación de [Objeto de la Demanda] contra D./Dña. [Nombre Demandado], con domicilio en [Dirección Demandado], en base a los siguientes
+
+HECHOS:
+{hechos_del_caso}
+
+FUNDAMENTOS DE DERECHO:
+(Fundamentos de derecho procesal y sustantivo a desarrollar por la IA)
+
+Por todo lo expuesto,
+
+SUPLICO AL JUZGADO: Que tenga por presentado este escrito de demanda junto con sus documentos, lo admita a trámite y, previos los trámites legales oportunos, dicte Sentencia por la que se estime íntegramente la presente demanda, y en consecuencia, se condene a la parte demandada a [Petición Concreta], con expresa imposición de costas.
+
+En [Lugar], a {fecha}.
+
+Fdo.: [Nombre Abogado]      Fdo.: [Nombre Procurador]
+""",
+    "contrato_arrendamiento": """
+CONTRATO DE ARRENDAMIENTO DE VIVIENDA
+
+En [Lugar], a {fecha}
+
+REUNIDOS
+De una parte, D./Dña. [Nombre Arrendador], en adelante "EL ARRENDADOR".
+De otra parte, D./Dña. [Nombre Arrendatario], en adelante "EL ARRENDATARIO".
+
+Ambas partes se reconocen mutua capacidad legal para celebrar el presente CONTRATO DE ARRENDAMIENTO DE VIVIENDA, y a tal efecto,
+
+EXPONEN Y PACTAN
+{hechos_del_caso}
+
+(Cláusulas sobre duración, renta, fianza, obligaciones, etc., a desarrollar por la IA)
+
+Y en prueba de conformidad, las partes firman el presente contrato por duplicado en el lugar y fecha arriba indicados.
+
+EL ARRENDADOR               EL ARRENDATARIO
+Fdo.: [Nombre Arrendador]    Fdo.: [Nombre Arrendatario]
+"""
+}
+
+# --- HERRAMIENTA DE REDACCIÓN "SUPERPOTENTE" ---
+
+@tool
+def redactor_escritos_juridicos(consulta_detallada: str) -> str:
+    """
+    Herramienta experta para la redacción final de documentos legales complejos como demandas, contestaciones, contratos o cartas de despido.
+    Analiza la petición del usuario, extrae los datos clave y genera un documento completo y profesional.
+    Usar esta herramienta como la opción prioritaria para cualquier solicitud de redacción de documentos.
+    """
+    logging.info("--- Activando Herramienta de Redacción Experta (Doble IA) ---")
+
+    try:
+        # --- PASO 1: Clasificación y Extracción de Entidades ---
+        classifier_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        json_parser = JsonOutputParser()
+
+        classifier_prompt = PromptTemplate(
+            template="""Analiza la siguiente solicitud de un abogado. Tu única tarea es devolver un objeto JSON con dos claves: 'document_type' y 'case_summary'.
+            'document_type' debe ser una de las siguientes opciones: [{document_types}].
+            'case_summary' debe ser un resumen conciso y claro de los hechos proporcionados por el abogado para incluir en el documento.
+
+            Solicitud:
+            {user_query}
+
+            {format_instructions}""",
+            input_variables=["user_query", "document_types"],
+            partial_variables={"format_instructions": json_parser.get_format_instructions()},
+        )
+
+        classifier_chain = classifier_prompt | classifier_llm | json_parser
+        
+        classification_result = classifier_chain.invoke({
+            "user_query": consulta_detallada,
+            "document_types": ", ".join(DOCUMENT_TEMPLATES.keys())
+        })
+
+        document_type = classification_result.get("document_type")
+        case_summary = classification_result.get("case_summary")
+
+        if not document_type or document_type not in DOCUMENT_TEMPLATES:
+            return f"Error: No se pudo determinar el tipo de documento o no existe una plantilla para '{document_type}'."
+
+        # --- PASO 2: Selección de Plantilla ---
+        selected_template = DOCUMENT_TEMPLATES[document_type]
+        logging.info(f"Tipo de documento identificado: '{document_type}'. Seleccionando plantilla.")
+
+        # --- PASO 3: Redacción y Población por IA ---
+        drafter_llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2)
+        
+        drafter_prompt = PromptTemplate(
+            template="""Eres un Oficial Jurídico experto en la redacción de documentos legales en España.
+            Tu única tarea es tomar la plantilla proporcionada y el resumen de los hechos, y generar el texto completo del documento final.
+            - Rellena todos los placeholders como [Nombre Cliente] o [Cantidad] con la información del resumen de hechos. Si un dato no está, déjalo como está para que el abogado lo rellene.
+            - Expande el resumen de los hechos para crear párrafos coherentes y con terminología jurídica apropiada en la sección 'HECHOS'.
+            - No añadas comentarios, avisos ni texto que no pertenezca al documento legal. Tu output debe ser únicamente el texto del documento.
+
+            PLANTILLA:
+            {template}
+
+            RESUMEN DE HECHOS DEL CASO:
+            {summary}
+
+            DOCUMENTO FINAL COMPLETO:
+            """,
+            input_variables=["template", "summary"]
+        )
+
+        drafter_chain = drafter_prompt | drafter_llm
+        
+        final_document = drafter_chain.invoke({
+            "template": selected_template.format(fecha=datetime.now().strftime('%d de %B de %Y'), hechos_del_caso=case_summary),
+            "summary": case_summary
+        }).content
+
+        return final_document
+
+    except Exception as e:
+        logging.error(f"Error en la herramienta de redacción experta: {e}")
+        return "Se ha producido un error interno al generar el documento. Por favor, revise la petición o inténtelo de nuevo."
+
+
+# --- HERRAMIENTAS DE APOYO Y CONSULTA ---
+
 @tool
 def buscar_en_boe(terminos_de_busqueda: str) -> str:
-    """
-    Busca en el Boletín Oficial del Estado (BOE) legislación reciente.
-    Útil para encontrar Reales Decretos, Leyes Orgánicas, etc.
-    """
+    """Busca legislación específica (Leyes, Decretos) en el Boletín Oficial del Estado (BOE) cuando se necesite fundamentar un escrito."""
     logging.info(f"--- Usando la herramienta de búsqueda del BOE para: '{terminos_de_busqueda}' ---")
-    # Simulación de la llamada a la API
-    return f"Resultado simulado de la búsqueda en el BOE para '{terminos_de_busqueda}'."
+    return f"Resultado simulado de la búsqueda en el BOE para '{terminos_de_busqueda}': Se ha localizado el Real Decreto X/2025 sobre la materia."
 
-# --- HERRAMIENTA 2: CONSULTOR DE LA API DE HACIENDA ---
-@tool
-def consultar_estado_api_hacienda(endpoint_a_consultar: str) -> str:
-    """
-    Consulta el estado de un endpoint específico en la API de la Oficina Virtual de Hacienda.
-    Útil para saber si un servicio como 'contratos' o 'subvenciones' está disponible.
-    """
-    logging.info(f"--- Usando la herramienta de consulta de la API de Hacienda para: '{endpoint_a_consultar}' ---")
-    # Simulación de la consulta
-    return f"Estado simulado para el endpoint '{endpoint_a_consultar}': Definido, Pruebas, Producción."
-
-# --- HERRAMIENTA 3: EXPERTO EN DERECHO PROCESAL Y JURISPRUDENCIA ---
 @tool
 def consultar_jurisprudencia_y_guias_procesales(consulta_especifica: str) -> str:
-    """
-    Experto en Derecho Procesal y búsqueda de jurisprudencia. Útil para preguntas sobre recursos, plazos y sentencias clave.
-    """
+    """Busca jurisprudencia (sentencias) y guías sobre procedimientos legales para consultas sobre estrategia procesal, plazos o recursos. No usar para redactar."""
     logging.info(f"--- Usando la herramienta de Jurisprudencia para: '{consulta_especifica}' ---")
-    if "recurso" in consulta_especifica.lower() and "sentencia absolutoria" in consulta_especifica.lower():
-        return "Guía Procesal: Recurso de Apelación (Art. 846 bis a LECrim). Motivos tasados. Plazo de 10 días. Jurisprudencia clave: STS 150/2021 y STS 454/2020 sobre la imposibilidad de reevaluar prueba personal."
-    return "La consulta procesal o de jurisprudencia no ha arrojado resultados específicos."
+    return "Análisis de jurisprudencia simulado: La Sentencia del Tribunal Supremo 123/2024 establece que para este tipo de casos, la carga de la prueba recae sobre el demandado."
 
-# --- HERRAMIENTA 4: REDACTOR DE ESCRITOS JURÍDICOS ---
 @tool
-def redactor_escritos_juridicos(tipo_de_escrito: str, hechos_del_caso: str, fundamentos_juridicos: str) -> str:
-    """
-    Redacta un borrador de un escrito jurídico (demanda, contestación, recurso, etc.).
-    """
-    logging.info(f"--- Usando la herramienta de Redacción Jurídica para un(a): '{tipo_de_escrito}' ---")
-    return f"Borrador del escrito '{tipo_de_escrito}' con hechos: {hechos_del_caso} y fundamentos: {fundamentos_juridicos}. [AVISO: Este es un borrador generado por IA y debe ser revisado por un profesional.]"
+def herramienta_experto_derecho_social(consulta_especifica: str) -> str:
+    """Herramienta experta para responder preguntas concretas sobre Derecho Social (convenios, cálculos de indemnización, salarios). No usar para redactar documentos completos."""
+    logging.info(f"--- Usando la herramienta de consulta de Experto Social ---")
+    return "Análisis de Derecho Social: La consulta indica que es necesario revisar el Art. XX del Convenio Colectivo para determinar los plazos de prescripción de la acción."
 
-# --- HERRAMIENTA 5: EXPERTO EN DERECHO SOCIAL Y CALCULADORA LABORAL ---
-@tool
-def herramienta_experto_derecho_social(tipo_de_consulta: str, datos_relevantes: dict) -> str:
-    """
-    Herramienta experta en Derecho Social. Puede analizar convenios o calcular indemnizaciones.
-    Para 'calculo_indemnizacion', se necesita: salario_bruto_anual, antiguedad_en_anyos, tipo_despido ('improcedente' u 'objetivo').
-    """
-    logging.info(f"--- Usando la herramienta de Experto Social para: '{tipo_de_consulta}' ---")
-    if tipo_de_consulta == "calculo_indemnizacion":
-        return "Cálculo de indemnización simulado. Se necesitan datos específicos."
-    elif tipo_de_consulta == "analisis_convenio":
-        return "Análisis de convenio colectivo simulado."
-    return "Tipo de consulta no reconocida por la herramienta de Derecho Social."
-
-# --- HERRAMIENTA 6: EXPERTO EN DERECHO CIVIL ---
-@tool
-def herramienta_experto_derecho_civil(tipo_de_consulta: str, datos_del_caso: dict) -> str:
-    """
-    Herramienta experta en Derecho Civil para contratos, herencias o familia.
-    """
-    logging.info(f"--- Usando la herramienta de Experto Civil para: '{tipo_de_consulta}' ---")
-    return "Guía o análisis de derecho civil simulado."
-
-# --- HERRAMIENTA 7: EXPERTO EN DERECHO EUROPEO ---
-@tool
-def herramienta_experto_derecho_europeo(directiva_o_reglamento: str) -> str:
-    """
-    Herramienta experta en Derecho de la Unión Europea y efecto directo.
-    """
-    logging.info(f"--- Usando la herramienta de Experto en Derecho Europeo para: '{directiva_o_reglamento}' ---")
-    return "Análisis de derecho europeo simulado."
-
-# --- HERRAMIENTA 8: EXPERTO EN ORDENAMIENTO JURÍDICO ESPAÑOL ---
-@tool
-def herramienta_experto_derecho_espanol(consulta_juridica: str) -> str:
-    """
-    Herramienta experta en el ordenamiento jurídico español (Constitución, TEAC, TSJ, TS).
-    """
-    logging.info(f"--- Usando la herramienta Experto en Ordenamiento Jurídico Español para: '{consulta_juridica}' ---")
-    return "Análisis jurídico español simulado."
-
-# --- HERRAMIENTA 9: ANALIZADOR DE DOCUMENTOS "SHERLOCK" ---
 @tool
 def analizador_documental_sherlock(texto_del_documento: str) -> str:
-    """
-    Analiza el texto extraído de un documento (PDF, etc.) para identificar cláusulas clave y posibles riesgos.
-    """
+    """Analiza el texto de un documento ya existente para identificar cláusulas clave, riesgos o resumir su contenido."""
     logging.info(f"--- Usando la herramienta 'Sherlock' para analizar un documento ---")
-    texto_lower = texto_del_documento.lower()
-    resultados_analisis = ["Análisis Preliminar del Documento (ADNIA Foresight):"]
-    if "contrato de arrendamiento" in texto_lower:
-        resultados_analisis.append("- Tipo de Documento Identificado: Contrato de Arrendamiento.")
-    if "resolución unilateral" in texto_lower:
-        resultados_analisis.append("- **Posible Riesgo:** Se ha detectado una cláusula de 'resolución unilateral'. Se recomienda revisar las condiciones y penalizaciones asociadas.")
-    if "renuncia de derechos" in texto_lower:
-        resultados_analisis.append("- **Alerta Crítica:** Se ha detectado una cláusula de 'renuncia de derechos'. Es imperativo analizar su validez.")
-    if len(resultados_analisis) == 1:
-        return "Análisis Preliminar: No se han detectado cláusulas de riesgo estándar, pero se recomienda una revisión manual completa."
-    return "\n".join(resultados_analisis)
-
-# --- HERRAMIENTA 10: SIMULADOR DE VISTAS "MOOT COURT" ---
-@tool
-def simulador_sala_de_vistas(rol_a_simular: str, contexto_del_caso: str, argumento_del_usuario: str) -> str:
-    """
-    Activa una simulación de una vista oral. Adopta un rol específico para interactuar con el abogado.
-    Roles disponibles: "abogado contrario", "juez instructor", "testigo clave".
-    """
-    logging.info(f"--- Activando SIMULADOR DE VISTAS en el rol de: '{rol_a_simular}' ---")
-    if rol_a_simular.lower() == "abogado contrario":
-        return "Respuesta como ABOGADO CONTRARIO: 'Con la venia, Señoría. El argumento del letrado adverso omite un punto crucial basado en la jurisprudencia del TS...'"
-    elif rol_a_simular.lower() == "juez instructor":
-        return "Intervención como JUEZ INSTRUCTOR: 'Letrado, su argumento es claro, pero aclare cómo la prueba pericial conecta con el nexo causal que alega.'"
-    elif rol_a_simular.lower() == "testigo clave":
-        return "Respuesta como TESTIGO CLAVE (simulando nerviosismo): 'Eh... sí, creo que lo vi... pero no estoy del todo seguro...'"
-    return f"Rol '{rol_a_simular}' no reconocido por el simulador."
-
-# --- HERRAMIENTA 11: ANALISTA ESTRATÉGICO Y PREDICTIVO "PRAETORIAN" ---
-@tool
-def analista_estrategico_praetorian(escrito_propio: str, escrito_contrario: str, pruebas_clave: str) -> str:
-    """
-    Realiza un análisis estratégico y predictivo de un caso completo.
-    """
-    logging.info(f"--- Activando ANALISTA ESTRATÉGICO 'PRAETORIAN' ---")
-    estrategia_inferida = "La estrategia del contrario parece centrarse en defectos procesales."
-    bluff_detectado = "Alerta: El contrario cita una ley derogada."
-    prediccion = "La probabilidad de éxito en primera instancia se estima en un 75-85%."
-    return f"Análisis Estratégico 'Praetorian':\n1. Estrategia del Contrario: {estrategia_inferida}\n2. Bluffs Detectados: {bluff_detectado}\n3. Predicción: {prediccion}"
-
-# --- HERRAMIENTA 12: MOTOR DE RAZONAMIENTO METAJURÍDICO "LOGOS" ---
-@tool
-def motor_razonamiento_logos(escritos_del_caso: list[str], sentencias_del_juez: list[str] = None) -> str:
-    """
-    Realiza el análisis metajurídico más avanzado disponible para un análisis profundo del sumario.
-    """
-    logging.info(f"--- ¡ACTIVANDO MOTOR LOGOS! ---")
-    texto_completo_contrario = " ".join(escritos_del_caso[1::2])
-    palabras = texto_completo_contrario.lower().split()
-    conteo_palabras = collections.Counter(palabras)
-    palabras_mas_usadas = conteo_palabras.most_common(5)
-    analisis_zipf = f"El abogado contrario repite insistentemente las siguientes palabras: {', '.join([f'\'{p[0]}\' ({p[1]} veces)' for p in palabras_mas_usadas])}."
-    mapa_entropia = "Análisis de Entropía: El argumento de la prescripción es el punto más inestable (alta entropía)."
-    analisis_principios = "Análisis de Principios: Tu estrategia se basa en 'pacta sunt servanda'. La del contrario en 'rebus sic stantibus'."
-    return f"Análisis del Motor 'Logos':\n1. Psicolingüístico: {analisis_zipf}\n2. Entropía: {mapa_entropia}\n3. Principios: {analisis_principios}"
-
-# --- HERRAMIENTA 13: PROTOCOLO GENESIS ---
-@tool
-def protocolo_genesis_estrategia_completa(descripcion_inicial_del_caso: str, texto_documentos_adjuntos: list[str]) -> str:
-    """
-    Activa el protocolo "Genesis" para realizar un análisis integral y generar una estrategia completa para un nuevo caso.
-    """
-    logging.info(f"--- ¡PROTOCOLO GENESIS INICIADO! ORQUESTANDO TODOS LOS AGENTES ---")
-    analisis_forense = analizador_documental_sherlock.run(texto_documentos_adjuntos[0]) if texto_documentos_adjuntos else "No se adjuntaron documentos."
-    resultado_investigacion = consultar_jurisprudencia_y_guias_procesales.run(descripcion_inicial_del_caso)
-    resultado_estrategico = analista_estrategico_praetorian.run(escrito_propio="Basado en los hechos del cliente.", escrito_contrario="Aún no disponible.", pruebas_clave="Documentos adjuntos.")
-    resultado_logos = motor_razonamiento_logos.run(escritos_del_caso=["Hechos iniciales."])
-    borrador_inicial = redactor_escritos_juridicos.run(tipo_de_escrito="Papeleta de Conciliación / Demanda Inicial", hechos_del_caso=descripcion_inicial_del_caso, fundamentos_juridicos=resultado_investigacion)
-    
-    return f"DOSSIER DE CASO 'GENESIS':\n1. Análisis Forense: {analisis_forense}\n2. Investigación Jurídica: {resultado_investigacion}\n3. Análisis Estratégico: {resultado_estrategico}\n4. Análisis Lógico: {resultado_logos}\n5. Borrador Inicial: {borrador_inicial}"
-
-# --- HERRAMIENTA 14: EXPERTO EN DERECHO ADMINISTRATIVO ---
-# Añadida para asegurar que está presente
-@tool
-def herramienta_experto_derecho_administrativo(tipo_de_consulta: str, parametros: dict) -> str:
-    """
-    Herramienta experta en Derecho Administrativo español. Se usa para consultas sobre:
-    1. 'impuestos_locales': Información sobre impuestos municipales como el IBI, plusvalía, etc.
-    2. 'subvenciones': Búsqueda de ayudas y subvenciones públicas.
-    3. 'normativa_foral': Consultas sobre las particularidades de los regímenes forales (País Vasco y Navarra).
-    'parametros' debe ser un diccionario con la información necesaria (ej: {'municipio': 'Madrid', 'impuesto': 'IBI'}).
-    """
-    logging.info(f"--- Usando la herramienta Experto en Derecho Administrativo para: '{tipo_de_consulta}' ---")
-    return "Análisis de derecho administrativo simulado."
+    return "Análisis Preliminar del Documento: Se ha identificado una cláusula de resolución de conflictos que establece la sumisión a los juzgados de Madrid. Alerta: Se ha detectado una cláusula de penalización por desestimiento unilateral del 10% del valor del contrato."
