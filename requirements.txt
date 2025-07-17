@@ -10,25 +10,20 @@ psycopg2-binary==2.9.9
 werkzeug==3.0.3
 
 # LangChain - Versions latest al 15 julio 2025 (de PyPI)
-langchain==0.3.26  # Released Jun 20, 2025
-langchain-core==0.3.68  # Released Jul 3, 2025
-langchain-community==0.3.27  # Released Jul 2, 2025
-langchain-openai==0.3.28  # Released Jul 14, 2025
-langchain-mistralai==0.2.11
-langchain-google-genai==2.1.7  # Compatible con core 0.3.x
-langgraph==0.5.3
-langchainhub
+langchain>=0.1.20
+langchain-core>=0.1.52
+langchain-community>=0.0.38
+langchain-openai>=0.1.6
+langchain-mistralai>=0.1.6
+langchain-google-genai>=1.0.4
+langgraph>=0.0.47
+langchainhub>=0.1.15
+langchain-tavily>=0.0.3
 
 # Herramientas de Agentes
 tavily-python==0.3.3
 
 # Humanizador y utilidades
-requests==2.32.3
-
-# Google Cloud
-google-cloud-storage==2.16.0
-
-# Análisis de documentos básicos (sin heavy deps)
-pypdf
+requests==2
 pillow
 pytesseract
