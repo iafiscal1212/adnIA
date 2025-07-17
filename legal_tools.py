@@ -14,7 +14,6 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 # --- PLANTILLAS MAESTRAS DE DOCUMENTOS ---
-# Un "arsenal" de plantillas de alta calidad que la herramienta usará.
 DOCUMENT_TEMPLATES = {
     "carta_despido": """
 [Ciudad], a {fecha}
@@ -89,55 +88,94 @@ Fdo.: [Nombre Arrendador]    Fdo.: [Nombre Arrendatario]
 """
 }
 
+QUESTIONS_BANK = {
+    "carta_despido": [
+        "¿Cuál es el nombre completo y DNI del trabajador?",
+        "¿Cuál es la fecha exacta de los hechos que motivan el despido?",
+        "Describe de forma detallada y cronológica cada uno de los hechos imputados.",
+        "¿Existen pruebas directas (documentos, fotos, vídeos)? ¿Cuáles son?",
+        "¿Hay testigos de los hechos? Si es así, proporciona sus nombres y cargos.",
+        "¿A qué Convenio Colectivo está sujeto el trabajador?"
+    ],
+    "demanda_juicio_ordinario": [
+        "¿Quién es el demandante (nombre completo, DNI, domicilio)?",
+        "¿Quién es el demandado (nombre completo, DNI, domicilio)?",
+        "¿Cuál es la cantidad exacta que se reclama?",
+        "Describe cronológicamente los hechos que dan lugar a la reclamación.",
+        "¿Qué documentos (contratos, facturas, burofaxes) sustentan la reclamación?"
+    ],
+    "contrato_arrendamiento": [
+        "¿Quién es el arrendador (propietario)?",
+        "¿Quién es el arrendatario (inquilino)?",
+        "¿Cuál es la dirección exacta de la vivienda a arrendar?",
+        "¿Cuál será el importe de la renta mensual en euros?",
+        "¿Cuál será la duración inicial del contrato en años?",
+        "¿Qué día del mes se deberá abonar la renta?"
+    ]
+}
+
+# --- HERRAMIENTAS DE PROTOCOLO Y CONVERSACIÓN ---
+
+@tool
+def iniciar_protocolo_interrogatorio(tipo_de_documento: str) -> str:
+    """
+    USAR ESTA HERRAMIENTA PRIMERO y solo una vez al inicio de una solicitud de redacción para obtener la lista de preguntas necesarias.
+    El input es el tipo de documento a redactar (ej: 'carta_despido').
+    NO USAR si ya se está en medio de una conversación o interrogatorio.
+    """
+    logging.info(f"--- Iniciando protocolo de interrogatorio para: {tipo_de_documento} ---")
+    document_type_key = tipo_de_documento.lower()
+    if "demanda" in document_type_key: document_type_key = "demanda_juicio_ordinario"
+    elif "contrato" in document_type_key: document_type_key = "contrato_arrendamiento"
+    elif "despido" in document_type_key: document_type_key = "carta_despido"
+    questions = QUESTIONS_BANK.get(document_type_key)
+    if not questions: return "Error: No se encontró un protocolo de interrogatorio para el tipo de documento especificado."
+    return json.dumps(questions)
+
+@tool
+def preguntar_al_usuario(pregunta: str) -> str:
+    """
+    Usa esta herramienta DESPUÉS de obtener la lista de preguntas con 'iniciar_protocolo_interrogatorio', para hacer cada pregunta individualmente al usuario.
+    El input es la pregunta exacta que quieres hacer.
+    NO USAR para responder a la pregunta inicial del usuario.
+    """
+    logging.info(f"--- Usando la herramienta para preguntar al usuario: {pregunta} ---")
+    return pregunta
+
 # --- HERRAMIENTA DE REDACCIÓN "SUPERPOTENTE" ---
 
 @tool
 def redactor_escritos_juridicos(consulta_detallada: str) -> str:
     """
-    Herramienta experta para la redacción final de documentos legales complejos como demandas, contestaciones, contratos o cartas de despido.
-    Analiza la petición del usuario, extrae los datos clave y genera un documento completo y profesional.
-    Usar esta herramienta como la opción prioritaria para cualquier solicitud de redacción de documentos.
+    Herramienta experta para la REDACCIÓN FINAL de un documento legal.
+    USAR ESTA HERRAMIENTA SÓLO DESPUÉS de haber recopilado toda la información necesaria del usuario.
+    El input debe ser un resumen completo con todos los datos del caso.
     """
     logging.info("--- Activando Herramienta de Redacción Experta (Doble IA) ---")
-
     try:
-        # --- PASO 1: Clasificación y Extracción de Entidades ---
         classifier_llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
         json_parser = JsonOutputParser()
-
         classifier_prompt = PromptTemplate(
             template="""Analiza la siguiente solicitud de un abogado. Tu única tarea es devolver un objeto JSON con dos claves: 'document_type' y 'case_summary'.
             'document_type' debe ser una de las siguientes opciones: [{document_types}].
             'case_summary' debe ser un resumen conciso y claro de los hechos proporcionados por el abogado para incluir en el documento.
-
-            Solicitud:
-            {user_query}
-
+            Solicitud: {user_query}
             {format_instructions}""",
             input_variables=["user_query", "document_types"],
             partial_variables={"format_instructions": json_parser.get_format_instructions()},
         )
-
         classifier_chain = classifier_prompt | classifier_llm | json_parser
-        
         classification_result = classifier_chain.invoke({
             "user_query": consulta_detallada,
             "document_types": ", ".join(DOCUMENT_TEMPLATES.keys())
         })
-
         document_type = classification_result.get("document_type")
         case_summary = classification_result.get("case_summary")
-
         if not document_type or document_type not in DOCUMENT_TEMPLATES:
             return f"Error: No se pudo determinar el tipo de documento o no existe una plantilla para '{document_type}'."
-
-        # --- PASO 2: Selección de Plantilla ---
         selected_template = DOCUMENT_TEMPLATES[document_type]
         logging.info(f"Tipo de documento identificado: '{document_type}'. Seleccionando plantilla.")
-
-        # --- PASO 3: Redacción y Población por IA ---
         drafter_llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", temperature=0.2)
-        
         drafter_prompt = PromptTemplate(
             template="""Eres un Oficial Jurídico experto en la redacción de documentos legales en España.
             Tu única tarea es tomar la plantilla proporcionada y el resumen de los hechos, y generar el texto completo del documento final.
@@ -155,43 +193,92 @@ def redactor_escritos_juridicos(consulta_detallada: str) -> str:
             """,
             input_variables=["template", "summary"]
         )
-
         drafter_chain = drafter_prompt | drafter_llm
-        
         final_document = drafter_chain.invoke({
             "template": selected_template.format(fecha=datetime.now().strftime('%d de %B de %Y'), hechos_del_caso=case_summary),
             "summary": case_summary
         }).content
-
         return final_document
-
     except Exception as e:
         logging.error(f"Error en la herramienta de redacción experta: {e}")
         return "Se ha producido un error interno al generar el documento. Por favor, revise la petición o inténtelo de nuevo."
 
-
-# --- HERRAMIENTAS DE APOYO Y CONSULTA ---
+# --- HERRAMIENTAS DE APOYO Y CONSULTA (con descripciones mejoradas) ---
 
 @tool
 def buscar_en_boe(terminos_de_busqueda: str) -> str:
-    """Busca legislación específica (Leyes, Decretos) en el Boletín Oficial del Estado (BOE) cuando se necesite fundamentar un escrito."""
+    """USAR SÓLO para buscar Leyes, Decretos o normativa específica en el Boletín Oficial del Estado. NO USAR para redactar ni para buscar jurisprudencia."""
     logging.info(f"--- Usando la herramienta de búsqueda del BOE para: '{terminos_de_busqueda}' ---")
     return f"Resultado simulado de la búsqueda en el BOE para '{terminos_de_busqueda}': Se ha localizado el Real Decreto X/2025 sobre la materia."
 
 @tool
+def consultar_estado_api_hacienda(endpoint_a_consultar: str) -> str:
+    """USAR SÓLO para consultar el estado de un servicio (endpoint) específico de la API de Hacienda."""
+    logging.info(f"--- Usando la herramienta de consulta de la API de Hacienda para: '{endpoint_a_consultar}' ---")
+    return f"Estado simulado para el endpoint '{endpoint_a_consultar}': Definido, Pruebas, Producción."
+
+@tool
 def consultar_jurisprudencia_y_guias_procesales(consulta_especifica: str) -> str:
-    """Busca jurisprudencia (sentencias) y guías sobre procedimientos legales para consultas sobre estrategia procesal, plazos o recursos. No usar para redactar."""
+    """USAR SÓLO para buscar sentencias (jurisprudencia) o guías sobre procedimientos, plazos y recursos. NO USAR para redactar documentos."""
     logging.info(f"--- Usando la herramienta de Jurisprudencia para: '{consulta_especifica}' ---")
     return "Análisis de jurisprudencia simulado: La Sentencia del Tribunal Supremo 123/2024 establece que para este tipo de casos, la carga de la prueba recae sobre el demandado."
 
 @tool
-def herramienta_experto_derecho_social(consulta_especifica: str) -> str:
-    """Herramienta experta para responder preguntas concretas sobre Derecho Social (convenios, cálculos de indemnización, salarios). No usar para redactar documentos completos."""
+def herramienta_experto_derecho_social(pregunta_concreta: str) -> str:
+    """USAR SÓLO para responder preguntas teóricas o específicas sobre Derecho Social (convenios, cálculos, salarios). NO USAR para redactar."""
     logging.info(f"--- Usando la herramienta de consulta de Experto Social ---")
     return "Análisis de Derecho Social: La consulta indica que es necesario revisar el Art. XX del Convenio Colectivo para determinar los plazos de prescripción de la acción."
 
 @tool
+def herramienta_experto_derecho_civil(consulta_civil_detallada: str) -> str:
+    """USAR SÓLO para responder preguntas teóricas o específicas sobre Derecho Civil (contratos, herencias, familia). NO USAR para redactar."""
+    logging.info(f"--- Usando la herramienta de Experto Civil para: '{consulta_civil_detallada[:50]}...' ---")
+    return "Guía o análisis de derecho civil simulado."
+
+@tool
+def herramienta_experto_derecho_europeo(consulta_europea_detallada: str) -> str:
+    """USAR SÓLO para responder preguntas teóricas o específicas sobre Derecho de la UE. NO USAR para redactar."""
+    logging.info(f"--- Usando la herramienta de Experto en Derecho Europeo para: '{consulta_europea_detallada[:50]}...' ---")
+    return "Análisis de derecho europeo simulado."
+
+@tool
+def herramienta_experto_derecho_espanol(consulta_juridica: str) -> str:
+    """USAR SÓLO para responder preguntas teóricas o específicas sobre el ordenamiento jurídico español. NO USAR para redactar."""
+    logging.info(f"--- Usando la herramienta Experto en Ordenamiento Jurídico Español para: '{consulta_juridica[:50]}...' ---")
+    return "Análisis jurídico español simulado."
+
+@tool
+def herramienta_experto_derecho_administrativo(consulta_administrativa_detallada: str) -> str:
+    """USAR SÓLO para responder preguntas teóricas o específicas sobre Derecho Administrativo (impuestos, subvenciones). NO USAR para redactar."""
+    logging.info(f"--- Usando la herramienta Experto en Derecho Administrativo ---")
+    return "Análisis de derecho administrativo simulado."
+
+@tool
 def analizador_documental_sherlock(texto_del_documento: str) -> str:
-    """Analiza el texto de un documento ya existente para identificar cláusulas clave, riesgos o resumir su contenido."""
+    """USAR SÓLO para analizar o resumir el contenido de un documento que el usuario ya ha proporcionado. NO USAR para redactar un documento nuevo."""
     logging.info(f"--- Usando la herramienta 'Sherlock' para analizar un documento ---")
-    return "Análisis Preliminar del Documento: Se ha identificado una cláusula de resolución de conflictos que establece la sumisión a los juzgados de Madrid. Alerta: Se ha detectado una cláusula de penalización por desestimiento unilateral del 10% del valor del contrato."
+    return "Análisis Preliminar del Documento: Se ha identificado una cláusula de resolución de conflictos que establece la sumisión a los juzgados de Madrid."
+
+@tool
+def simulador_sala_de_vistas(simulacion_detallada: str) -> str:
+    """USAR SÓLO para simular una vista oral o un interrogatorio, adoptando un rol (juez, abogado contrario). El input debe describir el escenario."""
+    logging.info(f"--- Activando SIMULADOR DE VISTAS ---")
+    return f"Respuesta de simulación: 'Señor letrado, proceda a exponer sus conclusiones sobre la falta de prueba que alega.'"
+
+@tool
+def analista_estrategico_praetorian(resumen_del_caso: str) -> str:
+    """USAR SÓLO para realizar un análisis estratégico y predictivo de un caso. El input debe ser un resumen del caso."""
+    logging.info(f"--- Activando ANALISTA ESTRATÉGICO 'PRAETORIAN' ---")
+    return "Análisis Estratégico 'Praetorian': La estrategia del contrario parece centrarse en defectos procesales. La probabilidad de éxito se estima en un 75-85%."
+
+@tool
+def motor_razonamiento_logos(sumario_del_caso: str) -> str:
+    """USAR SÓLO para realizar un análisis metajurídico profundo de un caso. El input debe ser un resumen del sumario del caso."""
+    logging.info(f"--- ¡ACTIVANDO MOTOR LOGOS! ---")
+    return "Análisis del Motor 'Logos': El punto más débil del caso es el argumento de la prescripción (alta entropía)."
+
+@tool
+def protocolo_genesis_estrategia_completa(descripcion_completa_del_caso: str) -> str:
+    """USAR SÓLO para activar un protocolo de análisis integral y generar una estrategia completa para un nuevo caso desde cero."""
+    logging.info(f"--- ¡PROTOCOLO GENESIS INICIADO! ---")
+    return "DOSSIER DE CASO 'GENESIS' generado con éxito."
