@@ -15,25 +15,13 @@ from langchain import hub
 from langchain_openai import ChatOpenAI
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mistralai import ChatMistralAI
+# Importación añadida para el prompt personalizado
+from langchain_core.prompts import PromptTemplate
 
 # --- NUESTRAS IMPORTACIONES ---
 from blockchain_adnia import Blockchain
-from legal_tools import (
-    buscar_en_boe, 
-    consultar_estado_api_hacienda, 
-    consultar_jurisprudencia_y_guias_procesales,
-    redactor_escritos_juridicos,
-    herramienta_experto_derecho_social,
-    herramienta_experto_derecho_civil,
-    herramienta_experto_derecho_europeo,
-    herramienta_experto_derecho_espanol,
-    analizador_documental_sherlock,
-    herramienta_experto_derecho_administrativo,
-    simulador_sala_de_vistas,
-    analista_estrategico_praetorian,
-    motor_razonamiento_logos,
-    protocolo_genesis_estrategia_completa
-)
+# Asegúrate de que legal_tools.py está en la misma carpeta y contiene todas las herramientas
+from legal_tools import *
 
 load_dotenv()
 logging.basicConfig(level=logging.DEBUG)
@@ -128,9 +116,53 @@ def handle_chat():
                     protocolo_genesis_estrategia_completa
                 ]
                 
-                prompt = hub.pull("hwchase17/react-chat")
+                # --- BLOQUE DEL PROMPT PERSONALIZADO (LA MODIFICACIÓN CLAVE) ---
+
+                # La plantilla base del agente ReAct
+                template = """
+Answer the following questions as best you can. You have access to the following tools:
+
+{tools}
+
+Use the following format:
+
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [{tool_names}]
+Action Input: the input to the action
+Observation: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question
+
+Begin!
+
+Question: {input}
+Thought:{agent_scratchpad}
+"""
+
+                # Añadimos la instrucción clave al final de la plantilla
+                final_instructions = """
+Your purpose is to act as an expert legal assistant for a lawyer.
+After using your tools and gathering all necessary information, you MUST formulate a final, comprehensive response that directly fulfills the user's original request.
+- If the user asked for a document to be drafted, your FINAL ANSWER must be the complete text of that document.
+- Do not provide meta-commentary about your own process or suggest consulting another lawyer. Your user is the lawyer.
+- Synthesize all the information you've gathered into a practical, definitive final output.
+"""
+
+                # Insertamos nuestras instrucciones en la plantilla original
+                prompt_with_final_instructions = template.replace(
+                    "Begin!", 
+                    final_instructions + "\n\nBegin!"
+                )
+
+                # Creamos el prompt final a partir de la plantilla modificada
+                prompt = PromptTemplate.from_template(prompt_with_final_instructions)
+
+                # Creamos el agente y el ejecutor con el nuevo prompt
                 agent = create_react_agent(llm, tools, prompt)
                 agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True)
+
 
                 # --- CONSTRUCCIÓN DEL HISTORIAL PARA EL AGENTE ---
                 chat_history = []
@@ -158,7 +190,7 @@ def handle_chat():
         app.logger.error(traceback.format_exc())
         return Response(f"Error interno del servidor: {e}", status=500)
 
-# --- RUTA DE SUBIDA DE ARCHIVOS MEJORADA ---
+# --- RUTA DE SUBIDA DE ARCHIVOS ---
 @app.route("/api/upload", methods=["POST"])
 def upload_file():
     if 'file' not in request.files: return jsonify({"error": "No se encontró el archivo"}), 400
@@ -183,6 +215,7 @@ def upload_file():
                         texto_extraido += page.extract_text() or ""
                 
                 if texto_extraido:
+                    # Usamos la herramienta directamente para el análisis
                     analisis_resultado = analizador_documental_sherlock.run(texto_extraido)
                 else:
                     analisis_resultado += " No se pudo extraer texto del PDF para su análisis."
@@ -195,7 +228,7 @@ def upload_file():
     else:
         return jsonify({"error": "Formato de archivo no permitido"}), 400
 
-# --- RUTA DE AUDITORÍA (sin cambios) ---
+# --- RUTA DE AUDITORÍA ---
 @app.route("/api/audit")
 def get_audit_log():
     try:
