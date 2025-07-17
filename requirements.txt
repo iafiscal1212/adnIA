@@ -10,16 +10,13 @@ psycopg2-binary==2.9.9
 werkzeug==3.0.3
 
 # LangChain - Versions latest al 15 julio 2025 (de PyPI)
-langchain>=0.1.20
-langchain-core>=0.1.52
-langchain-community>=0.0.38
-langchain-openai>=0.1.6
-langchain-mistralai>=0.1.6
-langchain-google-genai>=1.0.4
-langgraph>=0.0.47
-langchainhub>=0.1.15
-langchain-tavily>=0.0.3
-
+langchain
+langchain-core
+langchain-community
+langchain-google-genai
+langchain-openai
+langchain-mistralai
+requests
 # Herramientas de Agentes
 tavily-python==0.3.3
 
